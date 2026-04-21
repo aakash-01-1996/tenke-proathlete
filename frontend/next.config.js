@@ -1,7 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: {
-    NEXT_PUBLIC_API_URL: 'https://tenke-proathlete-production.up.railway.app',
+    NEXT_PUBLIC_API_URL: '/backend',
+  },
+  async rewrites() {
+    return [
+      {
+        source: '/backend/:path*',
+        destination: 'https://tenke-proathlete-production.up.railway.app/:path*',
+      },
+    ]
   },
 };
 
