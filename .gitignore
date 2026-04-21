@@ -15,6 +15,9 @@ package-lock.json
 /out
 dist/
 
+# Claude
+.claude/
+
 # Misc
 .DS_Store
 *.pem
