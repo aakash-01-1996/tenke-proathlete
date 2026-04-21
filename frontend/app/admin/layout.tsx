@@ -78,7 +78,8 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
           }
         } catch { /* ignore */ }
       } catch {
-        router.replace('/auth/signin')
+        // Network or unexpected error — don't redirect, let them stay and retry
+        setChecking(false)
       }
     })
 

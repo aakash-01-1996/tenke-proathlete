@@ -44,8 +44,13 @@ export default function AuthGuard({ children, requiredRole = 'any' }: AuthGuardP
           headers: { Authorization: `Bearer ${token}` },
         })
 
-        if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
           router.replace('/auth/signin')
+          return
+        }
+        if (!res.ok) {
+          // Backend error — let them through rather than redirect loop
+          setStatus('allowed')
           return
         }
 
@@ -71,7 +76,8 @@ export default function AuthGuard({ children, requiredRole = 'any' }: AuthGuardP
           return
         }
       } catch {
-        router.replace('/auth/signin')
+        // Network error — let them through rather than redirect loop
+        setStatus('allowed')
       }
     })
 
