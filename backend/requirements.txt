@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg2-binary
+python-dotenv
+python-multipart
+pydantic-settings
+alembic
+firebase-admin
+slowapi
+email-validator
+cloudinary
