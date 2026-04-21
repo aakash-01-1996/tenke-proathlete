@@ -2,6 +2,7 @@
 .env.*
 firebase_service_account.json
 *.json.key
+scripts/
 __pycache__/
 *.pyc
 *.pyo
