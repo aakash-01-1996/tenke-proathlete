@@ -29,4 +29,4 @@ A full-stack athlete management platform for tracking performance, managing trai
 - Coaches and trainers can add and manage members, assign training plans, and track performance metrics
 - Members can view their metrics, download gameplans, submit training day change requests, and engage with the community
 - Admins can manage events, bookings, summer camp inquiries, and contact messages
-- Secure login with forced password change on first login and forgot password via email + member ID verification
+
