@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/backend/:path*",
+      "destination": "https://tenke-proathlete-production.up.railway.app/:path*"
+    }
+  ]
+}
