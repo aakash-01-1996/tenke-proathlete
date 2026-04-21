@@ -1,16 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from core.config import settings
 from api.routes import auth, members, trainers, coaches, community, nutrition, metrics, inquiries, gameplan
 from api.routes import day_change_requests, events, bookings, contact_messages
 
 app = FastAPI(title="ProAthelete API")
 
-from core.config import settings
+allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in settings.ALLOWED_ORIGINS.split(",")],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
