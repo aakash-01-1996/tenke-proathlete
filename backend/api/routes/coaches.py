@@ -33,7 +33,6 @@ def list_coaches(
     return [
         {
             "id": str(c.id),
-            "display_id": c.display_id,
             "email": c.email,
             "first_name": c.first_name,
             "last_name": c.last_name,
@@ -75,10 +74,7 @@ def create_coach(
         )
 
     try:
-        from sqlalchemy import func as sqlfunc
-        max_id = db.query(sqlfunc.max(User.display_id)).scalar() or 0
-        next_display_id = max_id + 1
-        coach_user = User(email=payload.email, first_name=payload.first_name, last_name=payload.last_name, role=UserRole.coach, must_change_password=True, display_id=next_display_id)
+        coach_user = User(email=payload.email, first_name=payload.first_name, last_name=payload.last_name, role=UserRole.coach, must_change_password=True)
         db.add(coach_user)
         db.commit()
         db.refresh(coach_user)

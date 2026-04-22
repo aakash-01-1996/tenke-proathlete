@@ -14,7 +14,6 @@ class User(Base):
     __tablename__ = "users"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False)
-    display_id = Column(Integer, unique=True, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.member)
