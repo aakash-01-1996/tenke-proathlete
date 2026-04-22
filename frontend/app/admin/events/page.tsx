@@ -376,19 +376,14 @@ export default function EventsPage() {
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Title</label>
-                <input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                <input value={form.title} onChange={e => {
+                    const title = e.target.value
+                    const autoSlug = title.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+                    setForm({ ...form, title, slug: autoSlug })
+                  }}
                   placeholder="e.g. Summer Camp 2026"
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
                   style={{ padding: '0.6rem 0.875rem' }} />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Slug <span className="font-normal text-gray-300">(URL path, e.g. summer-camp-2026)</span></label>
-                <input value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
-                  placeholder="summer-camp-2026"
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm font-mono text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
-                  style={{ padding: '0.6rem 0.875rem' }} />
-                {form.slug && <p className="text-xs text-gray-400 mt-1">Page will be at: /events/{form.slug}</p>}
               </div>
 
               <div>
