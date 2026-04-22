@@ -44,7 +44,7 @@ async function getToken() {
   return user.getIdToken()
 }
 
-type Coach = { id: string; email: string; first_name: string | null; last_name: string | null; created_at: string | null }
+type Coach = { id: string; display_id: number | null; email: string; first_name: string | null; last_name: string | null; created_at: string | null }
 type CoachForm = { first_name: string; last_name: string; email: string }
 type NewCoachCreds = { name: string; email: string; password: string }
 
@@ -332,7 +332,9 @@ export default function TrainersPage() {
                       <p className="text-sm font-semibold text-gray-900">{c.first_name} {c.last_name}</p>
                     )}
                     <p className="text-sm text-gray-500">{c.email}</p>
-                    <p className="text-xs text-gray-400">ID: <span className="font-semibold text-gray-600">{c.id}</span></p>
+                    {c.display_id != null && (
+                      <p className="text-xs text-gray-400">ID: <span className="font-semibold text-gray-600">{c.display_id}</span></p>
+                    )}
                     <p className="text-xs text-gray-400">Coach · Added {c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</p>
                   </div>
                   <div className="flex items-center gap-2">
