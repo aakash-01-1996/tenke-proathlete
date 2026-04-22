@@ -138,6 +138,14 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         {/* Bottom — back to site + sign out */}
         <div className="border-t border-gray-700 flex flex-col gap-1" style={{ padding: '1rem 0.75rem' }}>
           <Link
+            href="/admin/members"
+            className="flex items-center gap-3 rounded-xl text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition"
+            style={{ padding: '0.6rem 0.875rem' }}
+          >
+            <span className="text-base">⚡</span>
+            Back to Breakpoint
+          </Link>
+          <Link
             href="/"
             className="flex items-center gap-3 rounded-xl text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition"
             style={{ padding: '0.6rem 0.875rem' }}

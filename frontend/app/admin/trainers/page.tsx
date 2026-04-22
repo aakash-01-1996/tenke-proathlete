@@ -332,6 +332,7 @@ export default function TrainersPage() {
                       <p className="text-sm font-semibold text-gray-900">{c.first_name} {c.last_name}</p>
                     )}
                     <p className="text-sm text-gray-500">{c.email}</p>
+                    <p className="text-xs text-gray-400">ID: <span className="font-semibold text-gray-600">{c.id}</span></p>
                     <p className="text-xs text-gray-400">Coach · Added {c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</p>
                   </div>
                   <div className="flex items-center gap-2">
