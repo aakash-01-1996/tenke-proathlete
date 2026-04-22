@@ -9,7 +9,7 @@ from db.session import get_db
 from db.models import Trainer, User, UserRole
 from sqlalchemy.orm import Session
 
-app = FastAPI(title="ProAthelete API", redirect_slashes=False)
+app = FastAPI(title="ProAthelete API")
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 allowed_origins = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()]
