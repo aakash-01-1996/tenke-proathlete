@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 const RAILWAY = 'https://tenke-proathlete-production.up.railway.app'
 
 async function proxy(
@@ -12,10 +14,17 @@ async function proxy(
 
   const headers: Record<string, string> = {}
   req.headers.forEach((v, k) => {
-    if (k !== 'host') headers[k] = v
+    if (k !== 'host' && k !== 'accept-encoding') headers[k] = v
   })
 
-  const init: RequestInit = { method: req.method, headers, redirect: 'follow' }
+  const init: RequestInit = {
+    method: req.method,
+    headers,
+    redirect: 'follow',
+    // @ts-ignore — disable Next.js fetch caching
+    cache: 'no-store',
+    next: { revalidate: 0 },
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     init.body = await req.arrayBuffer()
   }
@@ -24,10 +33,13 @@ async function proxy(
 
   const resHeaders = new Headers()
   upstream.headers.forEach((v, k) => {
-    if (!['transfer-encoding', 'connection'].includes(k)) resHeaders.set(k, v)
+    if (!['transfer-encoding', 'connection', 'content-encoding'].includes(k)) {
+      resHeaders.set(k, v)
+    }
   })
 
-  return new NextResponse(upstream.body, { status: upstream.status, headers: resHeaders })
+  const body = upstream.body ?? null
+  return new NextResponse(body, { status: upstream.status, headers: resHeaders })
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
