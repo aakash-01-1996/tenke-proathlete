@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
-import { getOptimizedUrl } from '@/lib/cloudinary'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -118,16 +117,6 @@ export default function EventPage({ params }: { params: Promise<{ slug: string }
               </svg>
               Back to Home
             </Link>
-
-            {event.cover_image_url && (
-              <div className="w-full rounded-2xl overflow-hidden mb-6" style={{ height: '200px' }}>
-                <img
-                  src={getOptimizedUrl(event.cover_image_url, { width: 800 })}
-                  alt={event.title}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            )}
 
             <p className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Upcoming Event</p>
             <h1 className="text-4xl font-bold text-white mb-4">{event.title}</h1>
