@@ -711,18 +711,21 @@ export default function AthletePage() {
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Current Password</label>
                     <input type="password" value={pwCurrent} onChange={e => setPwCurrent(e.target.value)}
+                      autoComplete="current-password"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
                       style={{ padding: '0.6rem 0.875rem' }} />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">New Password</label>
                     <input type="password" value={pwNew} onChange={e => setPwNew(e.target.value)}
+                      autoComplete="new-password"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
                       style={{ padding: '0.6rem 0.875rem' }} />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Confirm New Password</label>
                     <input type="password" value={pwConfirm} onChange={e => setPwConfirm(e.target.value)}
+                      autoComplete="new-password"
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
                       style={{ padding: '0.6rem 0.875rem' }} />
                   </div>
