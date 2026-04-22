@@ -37,6 +37,7 @@ def list_coaches(
             "email": c.email,
             "first_name": c.first_name,
             "last_name": c.last_name,
+            "phone": c.phone,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         }
         for c in coaches

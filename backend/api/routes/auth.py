@@ -16,6 +16,7 @@ class MeOut(BaseModel):
     email: str
     role: str
     name: Optional[str] = None
+    phone: Optional[str] = None
     ref_id: Optional[UUID] = None
     is_privileged: bool = False
     must_change_password: bool = False
@@ -43,6 +44,7 @@ def get_me(user=Depends(get_current_user), db: Session = Depends(get_db)):
         email=user.email,
         role=user.role.value,
         name=name,
+        phone=user.phone,
         ref_id=user.ref_id,
         is_privileged=is_privileged(user.email),
         must_change_password=user.must_change_password,
@@ -81,6 +83,7 @@ def verify_identity(payload: VerifyIdentityIn, db: Session = Depends(get_db)):
 class UpdateProfileIn(BaseModel):
     first_name: str
     last_name: str
+    phone: Optional[str] = None
 
 
 @router.patch("/profile", status_code=204)
@@ -89,9 +92,10 @@ def update_profile(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update the display name for the current user."""
+    """Update the display name and phone for the current user."""
     user.first_name = payload.first_name.strip()
     user.last_name = payload.last_name.strip()
+    user.phone = payload.phone.strip() if payload.phone else None
     db.add(user)
     db.commit()
 

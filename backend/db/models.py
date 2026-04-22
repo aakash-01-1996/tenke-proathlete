@@ -17,6 +17,7 @@ class User(Base):
     display_id = Column(Integer, unique=True, nullable=True)
     first_name = Column(String, nullable=True)
     last_name = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.member)
     ref_id = Column(UUID(as_uuid=True), nullable=True)
     must_change_password = Column(Boolean, default=False, server_default='false', nullable=False)

@@ -44,8 +44,9 @@ async function getToken() {
   return user.getIdToken()
 }
 
-type Coach = { id: string; display_id: number | null; email: string; first_name: string | null; last_name: string | null; created_at: string | null }
+type Coach = { id: string; display_id: number | null; email: string; first_name: string | null; last_name: string | null; phone: string | null; created_at: string | null }
 type CoachForm = { first_name: string; last_name: string; email: string }
+type CoachProfileForm = { first_name: string; last_name: string; phone: string }
 type NewCoachCreds = { name: string; email: string; password: string }
 
 export default function TrainersPage() {
@@ -79,7 +80,7 @@ export default function TrainersPage() {
   const [newCoachCreds, setNewCoachCreds] = useState<NewCoachCreds | null>(null)
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
   const [editNameTarget, setEditNameTarget] = useState<Coach | null>(null)
-  const [nameForm, setNameForm] = useState({ first_name: '', last_name: '' })
+  const [nameForm, setNameForm] = useState<CoachProfileForm>({ first_name: '', last_name: '', phone: '' })
   const [nameSaving, setNameSaving] = useState(false)
 
   const API = process.env.NEXT_PUBLIC_API_URL
@@ -159,11 +160,11 @@ export default function TrainersPage() {
       const res = await fetch(`${API}/auth/profile`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(nameForm),
+        body: JSON.stringify({ first_name: nameForm.first_name, last_name: nameForm.last_name, phone: nameForm.phone.trim() || null }),
       })
       if (res.ok) {
         setCoaches(cs => cs.map(c => c.id === editNameTarget.id
-          ? { ...c, first_name: nameForm.first_name.trim(), last_name: nameForm.last_name.trim() }
+          ? { ...c, first_name: nameForm.first_name.trim(), last_name: nameForm.last_name.trim(), phone: nameForm.phone.trim() || null }
           : c
         ))
         setEditNameTarget(null)
@@ -332,6 +333,7 @@ export default function TrainersPage() {
                       <p className="text-sm font-semibold text-gray-900">{c.first_name} {c.last_name}</p>
                     )}
                     <p className="text-sm text-gray-500">{c.email}</p>
+                    {c.phone && <p className="text-xs text-gray-500">📞 {c.phone}</p>}
                     {c.display_id != null && (
                       <p className="text-xs text-gray-400">ID: <span className="font-semibold text-gray-600">{c.display_id}</span></p>
                     )}
@@ -339,10 +341,10 @@ export default function TrainersPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {c.email === currentUserEmail && (
-                      <button onClick={() => { setEditNameTarget(c); setNameForm({ first_name: c.first_name ?? '', last_name: c.last_name ?? '' }) }}
+                      <button onClick={() => { setEditNameTarget(c); setNameForm({ first_name: c.first_name ?? '', last_name: c.last_name ?? '', phone: c.phone ?? '' }) }}
                         className="text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
                         style={{ padding: '0.3rem 0.75rem' }}>
-                        Edit Name
+                        Edit Profile
                       </button>
                     )}
                     <button onClick={() => setDeleteCoachTarget(c)}
@@ -671,12 +673,12 @@ export default function TrainersPage() {
         </div>
       )}
 
-      {/* Edit Display Name Modal */}
+      {/* Edit Profile Modal */}
       {editNameTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" style={{ padding: '2rem' }}>
-            <h3 className="text-base font-semibold text-gray-900 mb-1">Edit Display Name</h3>
-            <p className="text-xs text-gray-400 mb-4">This name appears in the trainer dropdown and top bar.</p>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Edit Profile</h3>
+            <p className="text-xs text-gray-400 mb-4">Your name appears in the trainer dropdown and top bar.</p>
             <div className="flex flex-col gap-3">
               <input placeholder="First name" value={nameForm.first_name}
                 onChange={e => setNameForm(f => ({ ...f, first_name: e.target.value }))}
@@ -684,6 +686,10 @@ export default function TrainersPage() {
                 style={{ padding: '0.65rem 1rem' }} />
               <input placeholder="Last name" value={nameForm.last_name}
                 onChange={e => setNameForm(f => ({ ...f, last_name: e.target.value }))}
+                className="border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                style={{ padding: '0.65rem 1rem' }} />
+              <input placeholder="Phone (optional)" value={nameForm.phone}
+                onChange={e => setNameForm(f => ({ ...f, phone: e.target.value }))}
                 className="border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
                 style={{ padding: '0.65rem 1rem' }} />
             </div>
