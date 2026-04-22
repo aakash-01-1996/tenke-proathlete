@@ -11,8 +11,8 @@ type EventOut = {
 async function getActiveEvents(): Promise<EventOut[]> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL}/events?active_only=true`,
-      { next: { revalidate: 60 } }
+      `${process.env.NEXT_PUBLIC_API_URL}/events/?active_only=true`,
+      { cache: 'no-store' }
     )
     if (!res.ok) return []
     return res.json()
