@@ -108,8 +108,23 @@ export default function EventPage({ params }: { params: Promise<{ slug: string }
       <div className="grid grid-cols-1 md:grid-cols-12 min-h-screen">
 
         {/* Left — Event Details */}
-        <div className="md:col-span-6 bg-gray-800 flex flex-col" style={{ minHeight: '100vh' }}>
-          <div className="flex flex-col justify-center flex-1" style={{ padding: '2rem 3rem' }}>
+        <div
+          className="md:col-span-6 flex flex-col relative"
+          style={{
+            minHeight: '100vh',
+            backgroundColor: '#1f2937',
+            ...(event.cover_image_url ? {
+              backgroundImage: `url(${event.cover_image_url})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            } : {}),
+          }}
+        >
+          {/* Dark overlay when cover image is present */}
+          {event.cover_image_url && (
+            <div className="absolute inset-0" style={{ backgroundColor: 'rgba(17,24,39,0.75)' }} />
+          )}
+          <div className="flex flex-col justify-center flex-1 relative z-10" style={{ padding: '2rem 3rem' }}>
 
             <Link href="/" className="inline-flex items-center gap-1 text-sm text-gray-400 hover:text-gray-200 mb-8 transition">
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
