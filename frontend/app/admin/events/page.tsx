@@ -117,7 +117,7 @@ export default function EventsPage() {
     setLoading(true)
     setLoadError('')
     try {
-      const res = await fetch(`${API}/events`)
+      const res = await fetch(`${API}/events/`)
       if (!res.ok) throw new Error('Failed to load events')
       setEvents(await res.json())
     } catch {
@@ -212,7 +212,7 @@ export default function EventsPage() {
           body: JSON.stringify(body),
         })
       } else {
-        res = await fetch(`${API}/events`, {
+        res = await fetch(`${API}/events/`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(body),

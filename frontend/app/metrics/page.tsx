@@ -203,7 +203,7 @@ export default function AthletePage() {
         } else {
           // Coach/trainer: load members list + staff
           const [mRes, sRes] = await Promise.all([
-            fetch(`${API}/members`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API}/members/`, { headers: { Authorization: `Bearer ${token}` } }),
             fetch(`${API}/staff`, { headers: { Authorization: `Bearer ${token}` } }),
           ])
           if (!mRes.ok) throw new Error()

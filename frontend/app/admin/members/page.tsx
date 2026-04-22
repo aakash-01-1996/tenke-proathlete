@@ -127,9 +127,9 @@ export default function MembersPage() {
       const token = await getToken()
       const headers = { Authorization: `Bearer ${token}` }
       const [mRes, tRes, rRes] = await Promise.all([
-        fetch(`${API}/members`, { headers }),
+        fetch(`${API}/members/`, { headers }),
         fetch(`${API}/staff`, { headers }),
-        fetch(`${API}/day-change-requests?status_filter=pending`, { headers }),
+        fetch(`${API}/day-change-requests/?status_filter=pending`, { headers }),
       ])
       if (!mRes.ok || !tRes.ok) throw new Error()
       setMembers(await mRes.json())

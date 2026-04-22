@@ -102,8 +102,8 @@ export default function RequestsPage() {
     try {
       const params = statusFilter === 'all' ? 'status_filter=all' : `status_filter=${statusFilter}`
       const [reqRes, membersRes, removalRes] = await Promise.all([
-        fetch(`${API}/day-change-requests?${params}`, { headers: { Authorization: `Bearer ${tok}` } }),
-        fetch(`${API}/members`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/day-change-requests/?${params}`, { headers: { Authorization: `Bearer ${tok}` } }),
+        fetch(`${API}/members/`, { headers: { Authorization: `Bearer ${tok}` } }),
         fetch(`${API}/trainers/removal-requests`, { headers: { Authorization: `Bearer ${tok}` } }),
       ])
       if (!reqRes.ok || !membersRes.ok) throw new Error('Failed to load data')

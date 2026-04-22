@@ -95,7 +95,7 @@ export default function TrainersPage() {
     setLoadError('')
     try {
       const token = await getToken()
-      const res = await fetch(`${API}/trainers`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`${API}/trainers/`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) throw new Error()
       setTrainers(await res.json())
     } catch {
@@ -110,7 +110,7 @@ export default function TrainersPage() {
     setCoachError('')
     try {
       const token = await getToken()
-      const res = await fetch(`${API}/coaches`, { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch(`${API}/coaches/`, { headers: { Authorization: `Bearer ${token}` } })
       if (!res.ok) throw new Error()
       setCoaches(await res.json())
     } catch {
@@ -129,7 +129,7 @@ export default function TrainersPage() {
     setCoachModalError('')
     try {
       const token = await getToken()
-      const res = await fetch(`${API}/coaches`, {
+      const res = await fetch(`${API}/coaches/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(coachForm),

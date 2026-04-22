@@ -80,8 +80,8 @@ export default function AdminMetricsPage() {
       const token = await getToken()
       const headers = { Authorization: `Bearer ${token}` }
       const [mRes, eRes] = await Promise.all([
-        fetch(`${API}/members`, { headers }),
-        fetch(`${API}/metrics`, { headers }),
+        fetch(`${API}/members/`, { headers }),
+        fetch(`${API}/metrics/`, { headers }),
       ])
       if (!mRes.ok || !eRes.ok) throw new Error()
       setMembers(await mRes.json())

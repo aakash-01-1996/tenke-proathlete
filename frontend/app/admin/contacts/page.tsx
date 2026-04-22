@@ -38,7 +38,7 @@ export default function ContactsPage() {
     setLoadError('')
     try {
       const token = await getToken()
-      const res = await fetch(`${API}/contact-messages`, {
+      const res = await fetch(`${API}/contact-messages/`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (!res.ok) throw new Error()

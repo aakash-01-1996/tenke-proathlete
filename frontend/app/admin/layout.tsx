@@ -70,7 +70,7 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
 
         // Fetch pending request count for badge (best-effort)
         try {
-          const reqRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/day-change-requests?status_filter=pending`, {
+          const reqRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/day-change-requests/?status_filter=pending`, {
             headers: { Authorization: `Bearer ${token}` },
           })
           if (reqRes.ok) {
