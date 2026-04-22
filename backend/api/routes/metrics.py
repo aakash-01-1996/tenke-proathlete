@@ -14,6 +14,27 @@ from api.dependencies import require_coach_or_trainer, get_current_user
 router = APIRouter()
 
 
+def _compute_overall(fly_10yd, game_speed, vertical, broad_jump):
+    """Auto-calculate overall progress (0-100) from available metrics."""
+    entries = []
+    if fly_10yd is not None:
+        s = (1.45 - fly_10yd) / (1.45 - 0.85) * 100
+        entries.append((max(0.0, min(100.0, s)), 0.30))
+    if game_speed is not None:
+        s = (game_speed - 12) / (23 - 12) * 100
+        entries.append((max(0.0, min(100.0, s)), 0.20))
+    if vertical is not None:
+        s = (vertical - 12) / (42 - 12) * 100
+        entries.append((max(0.0, min(100.0, s)), 0.25))
+    if broad_jump is not None:
+        s = (broad_jump - 60) / (132 - 60) * 100
+        entries.append((max(0.0, min(100.0, s)), 0.25))
+    if not entries:
+        return None
+    total_weight = sum(w for _, w in entries)
+    return round(sum(score * (w / total_weight) for score, w in entries))
+
+
 def _metric_or_404(metric_id: UUID, db: Session) -> Metric:
     metric = db.query(Metric).filter(Metric.id == metric_id).first()
     if not metric:
@@ -54,7 +75,12 @@ def create_metric(
     """Add a new metric entry for a member. Coach/trainer only."""
     _verify_member_exists(payload.member_id, db)
     try:
-        metric = Metric(**payload.model_dump())
+        data = payload.model_dump()
+        data['overall_progress'] = _compute_overall(
+            data.get('fly_10yd'), data.get('game_speed'),
+            data.get('vertical'), data.get('broad_jump'),
+        )
+        metric = Metric(**data)
         db.add(metric)
         db.commit()
         db.refresh(metric)
@@ -83,6 +109,10 @@ def update_metric(
     try:
         for field, value in payload.model_dump(exclude_unset=True).items():
             setattr(metric, field, value)
+        metric.overall_progress = _compute_overall(
+            metric.fly_10yd, metric.game_speed,
+            metric.vertical, metric.broad_jump,
+        )
         db.commit()
         db.refresh(metric)
         member = db.query(Member).filter(Member.id == metric.member_id).first()

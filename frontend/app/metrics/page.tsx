@@ -519,7 +519,9 @@ export default function AthletePage() {
               {m.sessions_left != null && (
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Sessions Left</p>
-                  <p className="text-sm font-medium text-gray-800">{m.sessions_left}</p>
+                  <p className={`text-sm font-medium ${m.sessions_left < 5 ? 'text-red-600' : m.sessions_left <= 10 ? 'text-yellow-500' : 'text-gray-800'}`}>
+                    {m.sessions_left}
+                  </p>
                 </div>
               )}
               {m.package && (

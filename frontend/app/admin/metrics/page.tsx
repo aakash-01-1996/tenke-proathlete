@@ -137,7 +137,6 @@ export default function AdminMetricsPage() {
         game_speed: form.game_speed ? Number(form.game_speed) : null,
         vertical: form.vertical ? Number(form.vertical) : null,
         broad_jump: form.broad_jump ? Number(form.broad_jump) : null,
-        overall_progress: form.overall_progress ? Number(form.overall_progress) : null,
       }
       const url = editTarget ? `${API}/metrics/${editTarget.id}` : `${API}/metrics`
       const method = editTarget ? 'PUT' : 'POST'
@@ -331,10 +330,8 @@ export default function AdminMetricsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">Overall Progress (0–100)</label>
-                <input value={form.overall_progress} onChange={e => setForm({ ...form, overall_progress: e.target.value })}
-                  type="number" min="0" max="100" placeholder="75" className={inputCls} style={inputStyle} />
+              <div className="bg-gray-50 rounded-xl text-xs text-gray-400 text-center" style={{ padding: '0.75rem' }}>
+                Overall progress is calculated automatically from the metrics above.
               </div>
             </div>
 
