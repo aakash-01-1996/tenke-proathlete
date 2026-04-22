@@ -33,6 +33,7 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
     router.replace('/auth/signin')
   }
 
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -192,7 +193,7 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
                 <p className="text-xs font-semibold text-gray-900 truncate">{adminUser?.name ?? adminUser?.email}</p>
                 <p className="text-xs text-gray-400 truncate">{adminUser?.email}</p>
               </div>
-              <button
+<button
                 onClick={handleSignOut}
                 className="w-full flex items-center gap-2 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition rounded-b-xl"
               >
@@ -213,6 +214,6 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         </main>
       </div>
 
-    </div>
+</div>
   )
 }

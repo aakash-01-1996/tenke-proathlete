@@ -149,6 +149,7 @@ export default function AthletePage() {
   const [selectedId, setSelectedId] = useState<string>('')
   const [memberProfile, setMemberProfile] = useState<Member | null>(null)
   const [metricEntries, setMetricEntries] = useState<MetricEntry[]>([])
+  const [staff, setStaff] = useState<{ id: string; first_name: string; last_name: string }[]>([])
   const [loadingMe, setLoadingMe] = useState(true)
   const [loadingData, setLoadingData] = useState(false)
   const [error, setError] = useState('')
@@ -193,13 +194,17 @@ export default function AthletePage() {
 
         if (meData.role === 'member') {
           // Member: load their own profile + metrics
-          await loadMemberData(meData.ref_id!, token)
+          await loadMemberData(meData.ref_id!, token, meData.role)
           setSelectedId(meData.ref_id!)
         } else {
-          // Coach/trainer: load members list
-          const mRes = await fetch(`${API}/members`, { headers: { Authorization: `Bearer ${token}` } })
+          // Coach/trainer: load members list + staff
+          const [mRes, sRes] = await Promise.all([
+            fetch(`${API}/members`, { headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API}/staff`, { headers: { Authorization: `Bearer ${token}` } }),
+          ])
           if (!mRes.ok) throw new Error()
           const memberList: Member[] = await mRes.json()
+          if (sRes.ok) setStaff(await sRes.json())
           setMembers(memberList)
           if (memberList.length > 0) {
             setSelectedId(memberList[0].id)
@@ -217,13 +222,13 @@ export default function AthletePage() {
     return unsub
   }, [])
 
-  async function loadMemberData(memberId: string, token?: string) {
+  async function loadMemberData(memberId: string, token?: string, roleOverride?: string) {
     setLoadingData(true)
     setError('')
     try {
       const tok = token ?? await getToken()
       const headers = { Authorization: `Bearer ${tok}` }
-      const isMe = me?.role === 'member'
+      const isMe = (roleOverride ?? me?.role) === 'member'
 
       const [profileRes, metricsRes] = await Promise.all([
         fetch(isMe ? `${API}/members/me` : `${API}/members/${memberId}`, { headers }),
@@ -486,6 +491,18 @@ export default function AthletePage() {
                   <p className="text-sm font-medium text-gray-800">{m.phone}</p>
                 </div>
               )}
+
+              <hr className="border-gray-200 my-2" />
+
+              {m.trainer_id && (() => {
+                const t = staff.find(s => s.id === m.trainer_id)
+                return t ? (
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Trainer</p>
+                    <p className="text-sm font-medium text-gray-800">{t.first_name} {t.last_name}</p>
+                  </div>
+                ) : null
+              })()}
 
               <hr className="border-gray-200 my-2" />
 

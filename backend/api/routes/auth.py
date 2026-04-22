@@ -28,8 +28,11 @@ class MeOut(BaseModel):
 def get_me(user=Depends(get_current_user), db: Session = Depends(get_db)):
     """Returns the authenticated user's email, role, ref_id, and privilege level."""
     name: Optional[str] = None
-    if user.ref_id:
-        if user.role.value in ("coach", "trainer"):
+    # Coaches store name directly on User row
+    if user.first_name or user.last_name:
+        name = f"{user.first_name or ''} {user.last_name or ''}".strip()
+    elif user.ref_id:
+        if user.role.value == "trainer":
             row = db.query(Trainer).filter(Trainer.id == user.ref_id).first()
         else:
             row = db.query(Member).filter(Member.id == user.ref_id).first()
@@ -73,6 +76,24 @@ def verify_identity(payload: VerifyIdentityIn, db: Session = Depends(get_db)):
         ).first()
 
     return {"valid": row is not None}
+
+
+class UpdateProfileIn(BaseModel):
+    first_name: str
+    last_name: str
+
+
+@router.patch("/profile", status_code=204)
+def update_profile(
+    payload: UpdateProfileIn,
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the display name for the current user."""
+    user.first_name = payload.first_name.strip()
+    user.last_name = payload.last_name.strip()
+    db.add(user)
+    db.commit()
 
 
 @router.patch("/mark-password-changed", status_code=204)

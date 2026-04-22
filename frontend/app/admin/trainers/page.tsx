@@ -44,7 +44,7 @@ async function getToken() {
   return user.getIdToken()
 }
 
-type Coach = { id: string; email: string; created_at: string | null }
+type Coach = { id: string; email: string; first_name: string | null; last_name: string | null; created_at: string | null }
 type CoachForm = { first_name: string; last_name: string; email: string }
 type NewCoachCreds = { name: string; email: string; password: string }
 
@@ -77,10 +77,17 @@ export default function TrainersPage() {
   const [deleteCoachTarget, setDeleteCoachTarget] = useState<Coach | null>(null)
   const [deletingCoach, setDeletingCoach] = useState(false)
   const [newCoachCreds, setNewCoachCreds] = useState<NewCoachCreds | null>(null)
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null)
+  const [editNameTarget, setEditNameTarget] = useState<Coach | null>(null)
+  const [nameForm, setNameForm] = useState({ first_name: '', last_name: '' })
+  const [nameSaving, setNameSaving] = useState(false)
 
   const API = process.env.NEXT_PUBLIC_API_URL
 
-  useEffect(() => { fetchTrainers() }, [])
+  useEffect(() => {
+    fetchTrainers()
+    setCurrentUserEmail(getAuth(app).currentUser?.email ?? null)
+  }, [])
   useEffect(() => { if (tab === 'coaches') fetchCoaches() }, [tab])
 
   async function fetchTrainers() {
@@ -141,6 +148,28 @@ export default function TrainersPage() {
       setCoachModalError('Unable to reach the server.')
     } finally {
       setSavingCoach(false)
+    }
+  }
+
+  async function handleSaveName() {
+    if (!nameForm.first_name.trim() || !editNameTarget) return
+    setNameSaving(true)
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/auth/profile`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(nameForm),
+      })
+      if (res.ok) {
+        setCoaches(cs => cs.map(c => c.id === editNameTarget.id
+          ? { ...c, first_name: nameForm.first_name.trim(), last_name: nameForm.last_name.trim() }
+          : c
+        ))
+        setEditNameTarget(null)
+      }
+    } finally {
+      setNameSaving(false)
     }
   }
 
@@ -299,14 +328,26 @@ export default function TrainersPage() {
               {coaches.map(c => (
                 <div key={c.id} className="bg-white rounded-2xl border border-gray-200 flex items-center justify-between" style={{ padding: '1rem 1.5rem' }}>
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">{c.email}</p>
+                    {(c.first_name || c.last_name) && (
+                      <p className="text-sm font-semibold text-gray-900">{c.first_name} {c.last_name}</p>
+                    )}
+                    <p className="text-sm text-gray-500">{c.email}</p>
                     <p className="text-xs text-gray-400">Coach · Added {c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</p>
                   </div>
-                  <button onClick={() => setDeleteCoachTarget(c)}
-                    className="text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition"
-                    style={{ padding: '0.3rem 0.75rem' }}>
-                    Remove
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {c.email === currentUserEmail && (
+                      <button onClick={() => { setEditNameTarget(c); setNameForm({ first_name: c.first_name ?? '', last_name: c.last_name ?? '' }) }}
+                        className="text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                        style={{ padding: '0.3rem 0.75rem' }}>
+                        Edit Name
+                      </button>
+                    )}
+                    <button onClick={() => setDeleteCoachTarget(c)}
+                      className="text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                      style={{ padding: '0.3rem 0.75rem' }}>
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
               {coaches.length === 0 && <p className="text-gray-400 text-sm text-center" style={{ padding: '3rem' }}>No coaches yet.</p>}
@@ -621,6 +662,32 @@ export default function TrainersPage() {
                 className="text-sm font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-xl transition"
                 style={{ padding: '0.6rem 1.25rem' }}>
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Display Name Modal */}
+      {editNameTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" style={{ padding: '2rem' }}>
+            <h3 className="text-base font-semibold text-gray-900 mb-1">Edit Display Name</h3>
+            <p className="text-xs text-gray-400 mb-4">This name appears in the trainer dropdown and top bar.</p>
+            <div className="flex flex-col gap-3">
+              <input placeholder="First name" value={nameForm.first_name}
+                onChange={e => setNameForm(f => ({ ...f, first_name: e.target.value }))}
+                className="border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                style={{ padding: '0.65rem 1rem' }} />
+              <input placeholder="Last name" value={nameForm.last_name}
+                onChange={e => setNameForm(f => ({ ...f, last_name: e.target.value }))}
+                className="border border-gray-200 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                style={{ padding: '0.65rem 1rem' }} />
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={() => setEditNameTarget(null)} className="flex-1 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition" style={{ padding: '0.6rem' }}>Cancel</button>
+              <button onClick={handleSaveName} disabled={nameSaving} className="flex-1 bg-gray-900 text-white rounded-xl text-sm font-medium hover:bg-gray-700 transition disabled:opacity-50" style={{ padding: '0.6rem' }}>
+                {nameSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>

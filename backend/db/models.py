@@ -14,6 +14,8 @@ class User(Base):
     __tablename__ = "users"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String, unique=True, nullable=False)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.member)
     ref_id = Column(UUID(as_uuid=True), nullable=True)
     must_change_password = Column(Boolean, default=False, server_default='false', nullable=False)

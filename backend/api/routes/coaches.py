@@ -34,6 +34,8 @@ def list_coaches(
         {
             "id": str(c.id),
             "email": c.email,
+            "first_name": c.first_name,
+            "last_name": c.last_name,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         }
         for c in coaches
@@ -72,7 +74,7 @@ def create_coach(
         )
 
     try:
-        coach_user = User(email=payload.email, role=UserRole.coach, must_change_password=True)
+        coach_user = User(email=payload.email, first_name=payload.first_name, last_name=payload.last_name, role=UserRole.coach, must_change_password=True)
         db.add(coach_user)
         db.commit()
         db.refresh(coach_user)

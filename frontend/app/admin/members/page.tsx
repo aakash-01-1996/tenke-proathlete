@@ -11,6 +11,7 @@ type Trainer = {
   id: string
   first_name: string
   last_name: string
+  role?: string
 }
 
 type Member = {
@@ -127,7 +128,7 @@ export default function MembersPage() {
       const headers = { Authorization: `Bearer ${token}` }
       const [mRes, tRes, rRes] = await Promise.all([
         fetch(`${API}/members`, { headers }),
-        fetch(`${API}/trainers`, { headers }),
+        fetch(`${API}/staff`, { headers }),
         fetch(`${API}/day-change-requests?status_filter=pending`, { headers }),
       ])
       if (!mRes.ok || !tRes.ok) throw new Error()
@@ -510,7 +511,7 @@ export default function MembersPage() {
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
                   style={{ padding: '0.6rem 0.875rem' }}>
                   <option value="">— No trainer —</option>
-                  {trainers.map(t => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}</option>)}
+                  {trainers.map(t => <option key={t.id} value={t.id}>{t.first_name} {t.last_name}{t.role === 'coach' ? ' (Coach)' : ''}</option>)}
                 </select>
               </div>
 
