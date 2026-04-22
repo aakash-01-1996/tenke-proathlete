@@ -21,6 +21,7 @@ class InquiryCreate(BaseModel):
     email: EmailStr
     phone: str
     hear_about_us: Optional[str] = None
+    source: Optional[str] = None
 
 
 class InquiryOut(BaseModel):
@@ -32,6 +33,7 @@ class InquiryOut(BaseModel):
     email: str
     phone: str
     hear_about_us: Optional[str]
+    source: Optional[str]
     read: bool
     created_at: datetime
 
@@ -46,6 +48,7 @@ def _to_out(i: SummerCampInquiry) -> InquiryOut:
         email=i.email,
         phone=i.phone,
         hear_about_us=i.hear_about_us,
+        source=i.source,
         read=(i.read == "true"),
         created_at=i.created_at,
     )
@@ -62,6 +65,7 @@ def create_inquiry(payload: InquiryCreate, db: Session = Depends(get_db)):
             email=payload.email,
             phone=payload.phone.strip(),
             hear_about_us=payload.hear_about_us,
+            source=payload.source,
             read="false",
         )
         db.add(inquiry)

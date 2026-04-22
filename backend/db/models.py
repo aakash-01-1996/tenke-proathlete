@@ -124,6 +124,7 @@ class SummerCampInquiry(Base):
     email = Column(String, nullable=False)
     phone = Column(String, nullable=False)
     hear_about_us = Column(String, nullable=True)
+    source = Column(String, nullable=True)
     read = Column(String, nullable=False, default="false")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

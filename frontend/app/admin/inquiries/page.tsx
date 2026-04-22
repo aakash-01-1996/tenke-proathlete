@@ -16,6 +16,7 @@ type Inquiry = {
   email: string
   phone: string
   hear_about_us: string | null
+  source: string | null
   read: boolean
   created_at: string
 }
@@ -205,7 +206,7 @@ export default function InquiriesPage() {
                 </div>
                 <p className="text-xs text-gray-500">Child: {inquiry.child_name}, Age {inquiry.age}</p>
                 <span className="inline-block bg-gray-100 text-gray-500 text-xs rounded-lg" style={{ padding: '0.1rem 0.5rem', marginTop: '0.35rem' }}>
-                  Summer Camp 2026
+                  {inquiry.source ?? 'Summer Camp 2026'}
                 </span>
               </button>
             ))}
@@ -224,7 +225,7 @@ export default function InquiriesPage() {
                     <h3 className="text-lg font-bold text-gray-900">{selected.first_name} {selected.last_name}</h3>
                     <div className="flex items-center gap-2" style={{ marginTop: '0.35rem' }}>
                       <span className="inline-block bg-gray-100 text-gray-600 text-xs font-medium rounded-lg" style={{ padding: '0.15rem 0.6rem' }}>
-                        Summer Camp 2026
+                        {selected.source ?? 'Summer Camp 2026'}
                       </span>
                       <p className="text-xs text-gray-400">Submitted {formatDate(selected.created_at)}</p>
                     </div>
