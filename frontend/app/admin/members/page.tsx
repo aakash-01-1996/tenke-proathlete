@@ -112,6 +112,7 @@ export default function MembersPage() {
   const [reviewRequest, setReviewRequest] = useState<DayRequest | null>(null)
   const [reviewSaving, setReviewSaving] = useState(false)
   const [newMemberCreds, setNewMemberCreds] = useState<{ name: string; email: string; password: string } | null>(null)
+  const [attendingId, setAttendingId] = useState<string | null>(null)
   const [previewMember, setPreviewMember] = useState<Member | null>(null)
   const [previewMode, setPreviewMode] = useState<'mobile' | 'tablet' | 'desktop'>('mobile')
   const [showInactiveOnly, setShowInactiveOnly] = useState(false)
@@ -256,6 +257,28 @@ export default function MembersPage() {
       alert('Unable to reach the server.')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleAttend(m: Member) {
+    setAttendingId(m.id)
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/members/${m.id}/attend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err.detail ?? 'Failed to mark attendance.')
+        return
+      }
+      const updated = await res.json()
+      setMembers(prev => prev.map(x => x.id === m.id ? { ...x, sessions_left: updated.sessions_left } : x))
+    } catch {
+      alert('Failed to mark attendance.')
+    } finally {
+      setAttendingId(null)
     }
   }
 
@@ -408,6 +431,15 @@ export default function MembersPage() {
                           style={{ padding: '0.3rem 0.75rem' }}>
                           Preview
                         </button>
+                        {m.sessions_left != null && m.sessions_left > 0 && (
+                          <button
+                            onClick={() => handleAttend(m)}
+                            disabled={attendingId === m.id}
+                            className="text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition disabled:opacity-50"
+                            style={{ padding: '0.3rem 0.75rem' }}>
+                            {attendingId === m.id ? '...' : '✓ Attended'}
+                          </button>
+                        )}
                         <button onClick={() => openEdit(m)}
                           className="text-xs font-medium text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
                           style={{ padding: '0.3rem 0.75rem' }}>

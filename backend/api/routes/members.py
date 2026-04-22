@@ -234,3 +234,25 @@ def delete_member(
         firebase_auth.delete_user(fb_user.uid)
     except Exception:
         pass  # Firebase user may not exist; not a hard failure
+
+
+@router.post("/{member_id}/attend", response_model=MemberOut)
+def mark_attended(
+    member_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """Decrement sessions_left by 1. Coach/trainer only."""
+    member = _member_or_404(member_id, db)
+    if member.sessions_left is None:
+        raise HTTPException(status_code=400, detail="No session count set for this member.")
+    if member.sessions_left <= 0:
+        raise HTTPException(status_code=400, detail="No sessions remaining.")
+    try:
+        member.sessions_left -= 1
+        db.commit()
+        db.refresh(member)
+        return member
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update session count.")
