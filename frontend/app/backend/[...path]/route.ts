@@ -20,16 +20,23 @@ async function proxy(
   const init: RequestInit = {
     method: req.method,
     headers,
-    redirect: 'follow',
-    // @ts-ignore — disable Next.js fetch caching
+    // @ts-ignore
     cache: 'no-store',
-    next: { revalidate: 0 },
   }
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     init.body = await req.arrayBuffer()
   }
 
-  const upstream = await fetch(target.toString(), init)
+  // Fetch without following redirects so we can re-fetch with headers intact
+  let upstream = await fetch(target.toString(), { ...init, redirect: 'manual' })
+
+  // FastAPI redirects /members → /members/ — follow it server-side with auth header preserved
+  if (upstream.status === 307 || upstream.status === 308 || upstream.status === 301 || upstream.status === 302) {
+    const location = upstream.headers.get('location')
+    if (location) {
+      upstream = await fetch(location, { ...init, redirect: 'manual' })
+    }
+  }
 
   const resHeaders = new Headers()
   upstream.headers.forEach((v, k) => {
@@ -38,8 +45,10 @@ async function proxy(
     }
   })
 
-  const body = upstream.body ?? null
-  return new NextResponse(body, { status: upstream.status, headers: resHeaders })
+  return new NextResponse(upstream.body ?? null, {
+    status: upstream.status,
+    headers: resHeaders,
+  })
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
