@@ -193,8 +193,12 @@ export default function AthletePage() {
         setMe(meData)
 
         if (meData.role === 'member') {
-          // Member: load their own profile + metrics
-          await loadMemberData(meData.ref_id!, token, meData.role)
+          // Member: load their own profile + metrics + staff (for trainer name)
+          const [, sRes] = await Promise.all([
+            loadMemberData(meData.ref_id!, token, meData.role),
+            fetch(`${API}/staff`, { headers: { Authorization: `Bearer ${token}` } }),
+          ])
+          if (sRes.ok) setStaff(await sRes.json())
           setSelectedId(meData.ref_id!)
         } else {
           // Coach/trainer: load members list + staff
@@ -538,16 +542,16 @@ export default function AthletePage() {
                   </div>
                   {/* Only members can request a change */}
                   {!isCoach && (
-                    <div className="flex items-center gap-4 mt-3">
+                    <div className="flex flex-col gap-2 mt-3">
                       <button
                         onClick={openRequestModal}
-                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition"
+                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition text-left"
                       >
                         Request a change
                       </button>
                       <button
                         onClick={() => { setPwError(''); setPwSuccess(false); setShowPasswordModal(true) }}
-                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition"
+                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition text-left"
                       >
                         Change password
                       </button>

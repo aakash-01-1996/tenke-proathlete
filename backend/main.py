@@ -4,7 +4,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.config import settings
 from api.routes import auth, members, trainers, coaches, community, nutrition, metrics, inquiries, gameplan
 from api.routes import day_change_requests, events, bookings, contact_messages
-from api.dependencies import require_coach_or_trainer
+from api.dependencies import require_coach_or_trainer, get_current_user
 from db.session import get_db
 from db.models import Trainer, User, UserRole
 from sqlalchemy.orm import Session
@@ -38,7 +38,7 @@ app.include_router(contact_messages.router, prefix="/contact-messages", tags=["c
 
 
 @app.get("/staff")
-def list_staff(db: Session = Depends(get_db), user=Depends(require_coach_or_trainer)):
+def list_staff(db: Session = Depends(get_db), user=Depends(get_current_user)):
     """Return all trainers + coaches combined for assignment dropdowns."""
     from core.config import settings
     result = []
