@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { getOptimizedUrl } from '@/lib/cloudinary'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -31,7 +30,9 @@ const emptyForm = {
   hearAboutUs: '',
 }
 
-export default function EventPage({ params }: { params: { slug: string } }) {
+export default function EventPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params)
+
   const [event, setEvent] = useState<EventOut | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFoundState, setNotFoundState] = useState(false)
@@ -42,7 +43,7 @@ export default function EventPage({ params }: { params: { slug: string } }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    fetch(`${API}/events/${params.slug}`, { cache: 'no-store' })
+    fetch(`${API}/events/${slug}`, { cache: 'no-store' })
       .then(res => {
         if (res.status === 404) { setNotFoundState(true); return null }
         if (!res.ok) throw new Error()
@@ -51,7 +52,7 @@ export default function EventPage({ params }: { params: { slug: string } }) {
       .then(data => { if (data) setEvent(data) })
       .catch(() => setNotFoundState(true))
       .finally(() => setLoading(false))
-  }, [params.slug])
+  }, [slug])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
