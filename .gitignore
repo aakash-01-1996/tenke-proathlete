@@ -42,6 +42,9 @@ yarn-error.log*
 # IDE
 .vscode/
 .idea/
+
+# Local scripts (never push)
+backend/scripts/
 *.swp
 *.swo
 *~

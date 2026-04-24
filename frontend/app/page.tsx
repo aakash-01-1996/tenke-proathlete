@@ -61,7 +61,7 @@ export default async function Home() {
               className="inline-flex items-center bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-700 transition"
               style={{ padding: '0.6rem 1.25rem' }}
             >
-              📅 Book a Session
+              📅 Book a Free Session
             </Link>
           </div>
 
