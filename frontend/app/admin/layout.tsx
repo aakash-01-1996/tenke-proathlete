@@ -27,6 +27,9 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
   const [checking, setChecking] = useState(true)
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [pendingCount, setPendingCount] = useState(0)
+  const [bookingsCount, setBookingsCount] = useState(0)
+  const [inquiriesCount, setInquiriesCount] = useState(0)
+  const [contactsCount, setContactsCount] = useState(0)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -68,16 +71,31 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         setAdminUser({ email, role, name: name ?? null })
         setChecking(false)
 
-        // Fetch pending request count for badge (best-effort)
-        try {
-          const reqRes = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/day-change-requests/?status_filter=pending`, {
-            headers: { Authorization: `Bearer ${token}` },
-          })
-          if (reqRes.ok) {
-            const reqs = await reqRes.json()
-            setPendingCount(reqs.length)
-          }
-        } catch { /* ignore */ }
+        // Fetch badge counts in parallel (best-effort)
+        const api = process.env.NEXT_PUBLIC_API_URL
+        const headers = { Authorization: `Bearer ${token}` }
+        const [reqRes, bookRes, inqRes, conRes] = await Promise.allSettled([
+          fetch(`${api}/day-change-requests/?status_filter=pending`, { headers }),
+          fetch(`${api}/bookings/`, { headers }),
+          fetch(`${api}/inquiries/`, { headers }),
+          fetch(`${api}/contact-messages/`, { headers }),
+        ])
+        if (reqRes.status === 'fulfilled' && reqRes.value.ok) {
+          const d = await reqRes.value.json()
+          setPendingCount(d.length)
+        }
+        if (bookRes.status === 'fulfilled' && bookRes.value.ok) {
+          const d = await bookRes.value.json()
+          setBookingsCount(d.length)
+        }
+        if (inqRes.status === 'fulfilled' && inqRes.value.ok) {
+          const d = await inqRes.value.json()
+          setInquiriesCount(d.filter((i: { read: boolean }) => !i.read).length)
+        }
+        if (conRes.status === 'fulfilled' && conRes.value.ok) {
+          const d = await conRes.value.json()
+          setContactsCount(d.length)
+        }
       } catch {
         // Network or unexpected error — don't redirect, let them stay and retry
         setChecking(false)
@@ -111,7 +129,11 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         <nav className="flex-1 flex flex-col gap-1" style={{ padding: '1rem 0.75rem' }}>
           {navItems.map(({ href, label, icon }) => {
             const isActive = pathname.startsWith(href)
-            const showBadge = href === '/admin/requests' && pendingCount > 0
+            const badgeCount =
+              href === '/admin/requests'  ? pendingCount  :
+              href === '/admin/bookings'  ? bookingsCount :
+              href === '/admin/inquiries' ? inquiriesCount :
+              href === '/admin/contacts'  ? contactsCount  : 0
             return (
               <Link
                 key={href}
@@ -125,9 +147,9 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
               >
                 <span className="text-base">{icon}</span>
                 <span className="flex-1">{label}</span>
-                {showBadge && (
+                {badgeCount > 0 && (
                   <span className="text-xs font-bold bg-yellow-400 text-gray-900 rounded-full w-5 h-5 flex items-center justify-center">
-                    {pendingCount}
+                    {badgeCount > 99 ? '99+' : badgeCount}
                   </span>
                 )}
               </Link>
