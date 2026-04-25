@@ -73,6 +73,7 @@ export default function GameplanAdminPage() {
       formData.append('file', selectedFile)
       formData.append('upload_preset', uploadPreset!)
       formData.append('folder', 'gameplan')
+      formData.append('access_mode', 'public')
       const uploadRes = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
         method: 'POST',
         body: formData,
@@ -197,10 +198,11 @@ export default function GameplanAdminPage() {
                         href={pdf.file_url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        download
                         className="text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
                         style={{ padding: '0.3rem 0.75rem' }}
                       >
-                        View
+                        Download
                       </a>
                       <button
                         onClick={() => setDeleteTarget(pdf)}
