@@ -210,12 +210,17 @@ def delete_member(
     db: Session = Depends(get_db),
     user=Depends(require_coach_or_trainer),
 ):
-    """Permanently remove a member, their User row, and their Firebase account."""
+    """Permanently remove a member and all their data (metrics, workouts, requests, etc.)."""
+    from db.models import Metric, WorkoutExercise, DayChangeRequest
     member = _member_or_404(member_id, db)
     guard_superuser_delete(member.email, user)
     email = member.email
     try:
-        # Remove User row first (FK safe — no cascade needed)
+        # Delete all related rows that lack ON DELETE CASCADE
+        db.query(Metric).filter(Metric.member_id == member_id).delete(synchronize_session=False)
+        db.query(WorkoutExercise).filter(WorkoutExercise.member_id == member_id).delete(synchronize_session=False)
+        db.query(DayChangeRequest).filter(DayChangeRequest.member_id == member_id).delete(synchronize_session=False)
+        # Remove User login row
         db_user = db.query(User).filter(User.email == email).first()
         if db_user:
             db.delete(db_user)
