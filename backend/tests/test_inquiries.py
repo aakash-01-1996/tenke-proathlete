@@ -62,6 +62,19 @@ def test_create_inquiry_optional_hear_about_us(client):
     assert response.json()["hear_about_us"] is None
 
 
+def test_create_inquiry_source_defaults_to_none(client):
+    response = client.post("/inquiries/", json=VALID_INQUIRY)
+    assert response.status_code == 201
+    assert response.json()["source"] is None
+
+
+def test_create_inquiry_with_source(client):
+    payload = {**VALID_INQUIRY, "source": "Summer Camp 2026"}
+    response = client.post("/inquiries/", json=payload)
+    assert response.status_code == 201
+    assert response.json()["source"] == "Summer Camp 2026"
+
+
 # ── GET /inquiries/ ───────────────────────────────────────────────────────────
 
 def test_list_inquiries_requires_auth(client):
