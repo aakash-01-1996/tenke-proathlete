@@ -4,29 +4,16 @@ A full-stack athlete management platform for tracking performance, managing trai
 
 ## Tech Stack
 
-**Frontend**
-- Next.js 14 (App Router)
-- TypeScript
-- Tailwind CSS
+**Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS
 
-**Backend**
-- FastAPI (Python)
-- SQLAlchemy (ORM)
-- PostgreSQL (via Supabase)
+**Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL
 
-**Auth**
-- Firebase Authentication
+**Auth:** Firebase Authentication
 
-**File Storage**
-- Cloudinary
+**Storage:** Cloudinary
 
-**Testing**
-- Jest + React Testing Library (frontend)
-- Pytest (backend)
+**Deployment:** Vercel (frontend) · Railway (backend)
 
-## What This Project Does
+## What It Does
 
-- Coaches and trainers can add and manage members, assign training plans, and track performance metrics
-- Members can view their metrics, download gameplans, submit training day change requests, and engage with the community
-- Admins can manage events, bookings, summer camp inquiries, and contact messages
-
+Coaches and trainers manage members, track performance metrics, assign workout plans, and set training goals. Members can view their progress, download gameplans, and engage with the community feed. Admins handle bookings, inquiries, events, and day change requests from a central panel.
