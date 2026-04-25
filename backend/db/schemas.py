@@ -149,6 +149,7 @@ class MemberOut(BaseModel):
     sessions_total: Optional[int]
     sessions_left: Optional[int]
     training_days: Optional[List[str]]
+    training_goal: Optional[str] = None
     created_at: datetime
     last_active_at: Optional[datetime] = None
 

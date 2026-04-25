@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, Float, ForeignKey, Enum, DateTime, Date, Boolean
+from sqlalchemy import Column, String, Integer, Float, ForeignKey, Enum, DateTime, Date, Boolean, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from db.session import Base
@@ -51,6 +51,7 @@ class Member(Base):
     sessions_total = Column(Integer, nullable=True)
     sessions_left = Column(Integer, nullable=True)
     training_days = Column(String, nullable=True)  # comma-separated e.g. "M,W,F"
+    training_goal = Column(Text, nullable=True)    # HTML string from rich-text editor
     last_active_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -177,4 +178,16 @@ class Metric(Base):
     vertical = Column(Float, nullable=True)      # inches
     broad_jump = Column(Float, nullable=True)    # inches
     overall_progress = Column(Integer, nullable=True)  # 0–100 score
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkoutExercise(Base):
+    __tablename__ = "workout_exercises"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String, nullable=False)    # 'upper' | 'lower' | 'core'
+    name = Column(String, nullable=False)
+    sets = Column(Integer, nullable=True)
+    reps = Column(Integer, nullable=True)
+    duration = Column(String, nullable=True)     # e.g. "20 min", "30 sec"
     created_at = Column(DateTime(timezone=True), server_default=func.now())

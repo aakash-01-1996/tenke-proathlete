@@ -4,8 +4,9 @@ import string
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from typing import List
+from typing import List, Optional
 from uuid import UUID
+from pydantic import BaseModel
 
 from firebase_admin import auth as firebase_auth
 
@@ -234,6 +235,29 @@ def delete_member(
         firebase_auth.delete_user(fb_user.uid)
     except Exception:
         pass  # Firebase user may not exist; not a hard failure
+
+
+class GoalIn(BaseModel):
+    training_goal: Optional[str] = None  # HTML string, None to clear
+
+
+@router.patch("/{member_id}/goal", response_model=MemberOut)
+def update_goal(
+    member_id: UUID,
+    payload: GoalIn,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Update a member's training goal. Accessible to coach, trainer, and the member themselves."""
+    member = _member_or_404(member_id, db)
+    try:
+        member.training_goal = payload.training_goal
+        db.commit()
+        db.refresh(member)
+        return member
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to update goal.")
 
 
 @router.post("/{member_id}/attend", response_model=MemberOut)

@@ -25,6 +25,26 @@ type Member = {
   sessions_total: number | null
   sessions_left: number | null
   training_days: string[] | null
+  training_goal: string | null
+}
+
+type Exercise = {
+  id: string
+  member_id: string
+  category: 'upper' | 'lower' | 'core'
+  name: string
+  sets: number | null
+  reps: number | null
+  duration: string | null
+  created_at: string
+}
+
+type ExerciseForm = {
+  name: string
+  sets: string
+  mode: 'reps' | 'duration'
+  reps: string
+  duration: string
 }
 
 type MetricEntry = {
@@ -174,6 +194,22 @@ export default function AthletePage() {
   const [copied, setCopied] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Goal
+  const goalRef = useRef<HTMLDivElement>(null)
+  const [goalEditing, setGoalEditing] = useState(false)
+  const [goalSaving, setGoalSaving] = useState(false)
+
+  // Workout
+  const [exercises, setExercises] = useState<Exercise[]>([])
+  const [exerciseModal, setExerciseModal] = useState<{
+    open: boolean
+    category: 'upper' | 'lower' | 'core'
+    editing: Exercise | null
+  }>({ open: false, category: 'upper', editing: null })
+  const [exForm, setExForm] = useState<ExerciseForm>({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
+  const [exSaving, setExSaving] = useState(false)
+  const [exDeleting, setExDeleting] = useState(false)
+
   const API = process.env.NEXT_PUBLIC_API_URL
 
   // ── Boot: get current user role ──────────────────────────────────────────
@@ -234,14 +270,21 @@ export default function AthletePage() {
       const headers = { Authorization: `Bearer ${tok}` }
       const isMe = (roleOverride ?? me?.role) === 'member'
 
-      const [profileRes, metricsRes] = await Promise.all([
+      const [profileRes, metricsRes, workoutRes] = await Promise.all([
         fetch(isMe ? `${API}/members/me` : `${API}/members/${memberId}`, { headers }),
         fetch(`${API}/metrics/member/${memberId}`, { headers }),
+        fetch(`${API}/workout/${memberId}`, { headers }),
       ])
 
       if (!profileRes.ok) throw new Error()
-      setMemberProfile(await profileRes.json())
+      const profile = await profileRes.json()
+      setMemberProfile(profile)
       setMetricEntries(metricsRes.ok ? await metricsRes.json() : [])
+      setExercises(workoutRes.ok ? await workoutRes.json() : [])
+      // Sync goal into contenteditable
+      if (goalRef.current) {
+        goalRef.current.innerHTML = profile.training_goal ?? ''
+      }
       setAvatar(null)
     } catch {
       setError('Failed to load member data. Please try again.')
@@ -317,6 +360,97 @@ export default function AthletePage() {
       }
     } finally {
       setPwSaving(false)
+    }
+  }
+
+  // ── Goal ────────────────────────────────────────────────────────────────
+
+  async function saveGoal() {
+    if (!m) return
+    setGoalSaving(true)
+    try {
+      const token = await getToken()
+      await fetch(`${API}/members/${m.id}/goal`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ training_goal: goalRef.current?.innerHTML?.trim() || null }),
+      })
+      setGoalEditing(false)
+    } finally {
+      setGoalSaving(false)
+    }
+  }
+
+  function applyFormat(cmd: string) {
+    document.execCommand(cmd, false)
+    goalRef.current?.focus()
+  }
+
+  // ── Workout ─────────────────────────────────────────────────────────────
+
+  function openAddExercise(category: 'upper' | 'lower' | 'core') {
+    setExForm({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
+    setExerciseModal({ open: true, category, editing: null })
+  }
+
+  function openEditExercise(ex: Exercise) {
+    setExForm({
+      name: ex.name,
+      sets: ex.sets != null ? String(ex.sets) : '',
+      mode: ex.duration ? 'duration' : 'reps',
+      reps: ex.reps != null ? String(ex.reps) : '',
+      duration: ex.duration ?? '',
+    })
+    setExerciseModal({ open: true, category: ex.category, editing: ex })
+  }
+
+  async function saveExercise() {
+    if (!m || !exForm.name.trim()) return
+    setExSaving(true)
+    try {
+      const token = await getToken()
+      const body = {
+        category: exerciseModal.category,
+        name: exForm.name.trim(),
+        sets: exForm.sets ? parseInt(exForm.sets) : null,
+        reps: exForm.mode === 'reps' && exForm.reps ? parseInt(exForm.reps) : null,
+        duration: exForm.mode === 'duration' && exForm.duration ? exForm.duration.trim() : null,
+      }
+      const url = exerciseModal.editing
+        ? `${API}/workout/${m.id}/${exerciseModal.editing.id}`
+        : `${API}/workout/${m.id}`
+      const method = exerciseModal.editing ? 'PUT' : 'POST'
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) return
+      const saved: Exercise = await res.json()
+      if (exerciseModal.editing) {
+        setExercises(prev => prev.map(e => e.id === saved.id ? saved : e))
+      } else {
+        setExercises(prev => [...prev, saved])
+      }
+      setExerciseModal({ open: false, category: 'upper', editing: null })
+    } finally {
+      setExSaving(false)
+    }
+  }
+
+  async function deleteExercise(ex: Exercise) {
+    if (!m) return
+    setExDeleting(true)
+    try {
+      const token = await getToken()
+      await fetch(`${API}/workout/${m.id}/${ex.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setExercises(prev => prev.filter(e => e.id !== ex.id))
+      setExerciseModal({ open: false, category: 'upper', editing: null })
+    } finally {
+      setExDeleting(false)
     }
   }
 
@@ -418,7 +552,7 @@ export default function AthletePage() {
         ) : m ? (
           <>
             {/* Avatar */}
-            <div className="relative mb-6" style={{ marginTop: isCoach ? '0' : '1.5rem' }}>
+            <div className="relative mb-6" style={{ marginTop: isCoach ? '1.5rem' : '1.5rem' }}>
               <div
                 onClick={() => fileInputRef.current?.click()}
                 className="w-28 h-28 rounded-full bg-gray-800 flex items-center justify-center cursor-pointer overflow-hidden hover:opacity-90 transition"
@@ -448,7 +582,7 @@ export default function AthletePage() {
               }} className="hidden" />
             </div>
 
-            <h2 className="text-xl font-bold text-gray-900 text-center mb-6">{m.first_name} {m.last_name}</h2>
+            <h2 className="text-xl font-bold text-gray-900 text-center mb-10">{m.first_name} {m.last_name}</h2>
 
             <div className="w-full flex flex-col gap-4">
               {m.age != null && (
@@ -583,47 +717,265 @@ export default function AthletePage() {
               </div>
             )}
 
-            {tiles.length > 0 ? (
-              <>
-                {/* Metric Tiles */}
-                <div className="grid gap-4 mb-8" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-                  {tiles.map(tile => (
-                    <div key={tile.label} className="bg-white rounded-2xl border border-gray-200 flex flex-col" style={{ padding: '1.25rem' }}>
-                      <p className="text-xs text-gray-400 uppercase tracking-wide mb-3">{tile.label}</p>
-                      <p className="text-2xl font-bold text-gray-900 mb-2">{tile.value}</p>
-                      <div className="flex items-center gap-1 mt-auto">
-                        <TrendArrow direction={tile.direction} />
-                        <span className="text-xs font-medium text-gray-500">{tile.change}</span>
-                      </div>
-                      {tile.note && <p className="text-xs text-gray-300 mt-1">{tile.note}</p>}
+            {/* ── Goal Box ── */}
+            {m && (
+              <div className="mb-8">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Goal</p>
+                {goalEditing ? (
+                  /* Edit mode */
+                  <div className="bg-white border border-gray-200 rounded-2xl" style={{ padding: '1rem 1.25rem' }}>
+                    {/* Formatting toolbar */}
+                    <div className="flex items-center gap-1 mb-3">
+                      <button onMouseDown={e => { e.preventDefault(); applyFormat('bold') }}
+                        className="w-7 h-7 flex items-center justify-center text-xs font-bold text-gray-700 hover:bg-gray-100 rounded-lg transition">B</button>
+                      <button onMouseDown={e => { e.preventDefault(); applyFormat('italic') }}
+                        className="w-7 h-7 flex items-center justify-center text-xs italic text-gray-700 hover:bg-gray-100 rounded-lg transition">I</button>
+                      <button onMouseDown={e => { e.preventDefault(); applyFormat('underline') }}
+                        className="w-7 h-7 flex items-center justify-center text-xs underline text-gray-700 hover:bg-gray-100 rounded-lg transition">U</button>
+                      <div className="w-px h-4 bg-gray-200 mx-1" />
+                      <button
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { document.execCommand('insertText', false, '😊'); goalRef.current?.focus() }}
+                        className="w-7 h-7 flex items-center justify-center text-xs hover:bg-gray-100 rounded-lg transition">😊</button>
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => setGoalEditing(false)}
+                        className="text-xs font-medium text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
+                        style={{ padding: '0.3rem 0.75rem' }}>
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveGoal}
+                        disabled={goalSaving}
+                        className="text-xs font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-lg transition disabled:opacity-50 ml-2"
+                        style={{ padding: '0.3rem 0.875rem' }}>
+                        {goalSaving ? 'Saving...' : 'Save'}
+                      </button>
                     </div>
-                  ))}
-                </div>
-
-                {/* Progress Graph */}
-                {graphData.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-gray-200" style={{ padding: '1.5rem' }}>
-                    <div className="mb-4">
-                      <h2 className="text-sm font-semibold text-gray-700">Overall Progress</h2>
-                      <p className="text-xs text-gray-400 mt-0.5">Score over time</p>
-                    </div>
-                    <ProgressGraph data={graphData} />
+                    <div
+                      ref={goalRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      autoFocus
+                      data-placeholder="No goal set..."
+                      className="outline-none text-sm text-gray-800 empty:before:content-[attr(data-placeholder)] empty:before:text-gray-300 min-h-[1.5rem]"
+                    />
+                  </div>
+                ) : (
+                  /* View mode — full-width bar with pencil inside */
+                  <div className="bg-white border border-gray-200 rounded-2xl flex items-center gap-3" style={{ padding: '0.875rem 1.25rem' }}>
+                    <div
+                      className="flex-1 text-sm text-gray-800"
+                      dangerouslySetInnerHTML={{ __html: m.training_goal || '<span style="color:#d1d5db">No goal set...</span>' }}
+                    />
+                    <button
+                      onClick={() => {
+                        setGoalEditing(true)
+                        setTimeout(() => {
+                          if (goalRef.current) {
+                            goalRef.current.innerHTML = m.training_goal ?? ''
+                            goalRef.current.focus()
+                            const range = document.createRange()
+                            range.selectNodeContents(goalRef.current)
+                            range.collapse(false)
+                            window.getSelection()?.removeAllRanges()
+                            window.getSelection()?.addRange(range)
+                          }
+                        }, 0)
+                      }}
+                      className="flex-shrink-0 w-7 h-7 flex items-center justify-center text-gray-300 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
                   </div>
                 )}
-              </>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 flex flex-col items-center justify-center text-center" style={{ padding: '4rem 2rem' }}>
-                <p className="text-gray-400 font-medium mb-1">No metrics recorded yet</p>
-                {isCoach ? (
-                  <p className="text-sm text-gray-300">Add entries from the Metrics admin panel.</p>
-                ) : (
-                  <p className="text-sm text-gray-300">Your coach will add your metrics after each session.</p>
-                )}
+              </div>
+            )}
+
+            {/* ── Metrics ── */}
+            <div className="mb-8">
+              <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Metrics</p>
+              {tiles.length > 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-200 flex" style={{ minHeight: '260px' }}>
+                  {/* Left: metric tiles stacked */}
+                  <div className="flex flex-col gap-3 flex-shrink-0" style={{ width: '240px', padding: '1.25rem' }}>
+                    {tiles.map(tile => (
+                      <div key={tile.label} className="bg-gray-50 rounded-xl" style={{ padding: '0.875rem 1rem' }}>
+                        <p className="text-xs text-gray-400 uppercase tracking-wide mb-1.5">{tile.label}</p>
+                        <div className="flex items-center justify-between">
+                          <p className="text-lg font-bold text-gray-900">{tile.value}</p>
+                          <div className="flex items-center gap-1">
+                            <TrendArrow direction={tile.direction} />
+                            <span className="text-xs text-gray-400">{tile.change}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Divider */}
+                  <div className="w-px bg-gray-100 flex-shrink-0 my-4" />
+                  {/* Right: graph */}
+                  <div className="flex-1" style={{ padding: '1.25rem' }}>
+                    {graphData.length > 0 ? (
+                      <>
+                        <p className="text-xs font-semibold text-gray-500 mb-3">Overall Progress over time</p>
+                        <ProgressGraph data={graphData} />
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-300 text-sm">No graph data yet</div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-200 flex flex-col items-center justify-center text-center" style={{ padding: '4rem 2rem' }}>
+                  <p className="text-gray-400 font-medium mb-1">No metrics recorded yet</p>
+                  {isCoach ? (
+                    <p className="text-sm text-gray-300">Add entries from the Metrics admin panel.</p>
+                  ) : (
+                    <p className="text-sm text-gray-300">Your coach will add your metrics after each session.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ── Workout ── */}
+            {m && (
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Workout</p>
+                {(['upper', 'lower', 'core'] as const).map(cat => {
+                  const catExercises = exercises.filter(e => e.category === cat)
+                  const label = cat === 'upper' ? 'Upper Body' : cat === 'lower' ? 'Lower Body' : 'Core'
+                  return (
+                    <div key={cat} className="mb-6">
+                      <p className="text-xs font-semibold text-gray-500 mb-3">{label}</p>
+                      <div className="flex flex-wrap gap-3">
+                        {catExercises.map(ex => (
+                          <button
+                            key={ex.id}
+                            onClick={() => openEditExercise(ex)}
+                            className="bg-white border border-gray-200 rounded-2xl text-left hover:border-gray-400 hover:shadow-sm transition"
+                            style={{ padding: '0.875rem 1.1rem', minWidth: '120px' }}
+                          >
+                            <p className="text-sm font-semibold text-gray-900 mb-0.5">{ex.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {ex.sets != null ? `${ex.sets} × ` : ''}
+                              {ex.reps != null ? `${ex.reps} reps` : ex.duration ?? '—'}
+                            </p>
+                          </button>
+                        ))}
+                        {/* Add button */}
+                        <button
+                          onClick={() => openAddExercise(cat)}
+                          className="w-14 h-14 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 hover:border-gray-400 hover:text-gray-500 transition text-2xl font-light flex-shrink-0"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </>
         )}
       </div>
+
+      {/* Exercise Modal */}
+      {exerciseModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" style={{ padding: '2rem' }}>
+            <h3 className="text-base font-bold text-gray-900 mb-5">
+              {exerciseModal.editing ? 'Edit Exercise' : `Add Exercise · ${exerciseModal.category === 'upper' ? 'Upper Body' : exerciseModal.category === 'lower' ? 'Lower Body' : 'Core'}`}
+            </h3>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Exercise Name</label>
+                <input
+                  value={exForm.name}
+                  onChange={e => setExForm(f => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Bench Press"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                  style={{ padding: '0.6rem 0.875rem' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Sets</label>
+                <input
+                  value={exForm.sets}
+                  onChange={e => setExForm(f => ({ ...f, sets: e.target.value }))}
+                  type="number" min="1" placeholder="e.g. 3"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                  style={{ padding: '0.6rem 0.875rem' }}
+                />
+              </div>
+              {/* Reps / Duration toggle */}
+              <div>
+                <div className="flex gap-2 mb-2">
+                  {(['reps', 'duration'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => setExForm(f => ({ ...f, mode }))}
+                      className={`text-xs font-medium rounded-lg px-3 py-1 transition capitalize ${exForm.mode === mode ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+                {exForm.mode === 'reps' ? (
+                  <input
+                    value={exForm.reps}
+                    onChange={e => setExForm(f => ({ ...f, reps: e.target.value }))}
+                    type="number" min="1" placeholder="e.g. 10"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                    style={{ padding: '0.6rem 0.875rem' }}
+                  />
+                ) : (
+                  <input
+                    value={exForm.duration}
+                    onChange={e => setExForm(f => ({ ...f, duration: e.target.value }))}
+                    placeholder="e.g. 30 sec, 20 min"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                    style={{ padding: '0.6rem 0.875rem' }}
+                  />
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between" style={{ marginTop: '1.75rem' }}>
+              {/* Delete — only when editing */}
+              {exerciseModal.editing ? (
+                <button
+                  onClick={() => exerciseModal.editing && deleteExercise(exerciseModal.editing)}
+                  disabled={exDeleting}
+                  className="text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition disabled:opacity-50"
+                  style={{ padding: '0.4rem 0.875rem' }}
+                >
+                  {exDeleting ? 'Deleting...' : 'Delete'}
+                </button>
+              ) : <div />}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setExerciseModal({ open: false, category: 'upper', editing: null })}
+                  disabled={exSaving}
+                  className="text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
+                  style={{ padding: '0.6rem 1.25rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveExercise}
+                  disabled={exSaving || !exForm.name.trim()}
+                  className="text-sm font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-xl transition disabled:opacity-50"
+                  style={{ padding: '0.6rem 1.25rem' }}
+                >
+                  {exSaving ? 'Saving...' : exerciseModal.editing ? 'Save' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Day Change Request Modal */}
       {showRequestModal && (
