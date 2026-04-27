@@ -158,6 +158,18 @@ class CommunityComment(Base):
     content = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+class CommunityReport(Base):
+    __tablename__ = "community_reports"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content_type = Column(String, nullable=False)   # 'post' | 'comment'
+    content_id = Column(UUID(as_uuid=True), nullable=False)
+    post_id = Column(UUID(as_uuid=True), nullable=False)  # always the parent post id
+    reported_by_email = Column(String, nullable=False)
+    reason = Column(String, nullable=True)
+    status = Column(String, nullable=False, default='pending')  # 'pending' | 'dismissed'
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class GameplanPDF(Base):
     __tablename__ = "gameplan_pdfs"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -190,4 +202,13 @@ class WorkoutExercise(Base):
     sets = Column(Integer, nullable=True)
     reps = Column(Integer, nullable=True)
     duration = Column(String, nullable=True)     # e.g. "20 min", "30 sec"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExerciseWeightLog(Base):
+    __tablename__ = "exercise_weight_logs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    exercise_id = Column(UUID(as_uuid=True), ForeignKey("workout_exercises.id", ondelete="CASCADE"), nullable=False)
+    weight = Column(String, nullable=False)      # e.g. "45 lbs", "20 kg"
+    logged_at = Column(Date, nullable=False, server_default=func.current_date())
     created_at = Column(DateTime(timezone=True), server_default=func.now())

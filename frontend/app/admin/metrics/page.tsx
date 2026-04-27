@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { getAuth } from 'firebase/auth'
 import { app } from '@/lib/firebase'
 import { TableSkeleton } from '@/components/Skeleton'
@@ -61,6 +61,7 @@ export default function AdminMetricsPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [selectedMember, setSelectedMember] = useState('all')
+  const [expandedMembers, setExpandedMembers] = useState<Set<string>>(new Set())
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<MetricEntry | null>(null)
   const [form, setForm] = useState<MetricForm>(emptyForm)
@@ -68,6 +69,14 @@ export default function AdminMetricsPage() {
   const [saving, setSaving] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<MetricEntry | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  function toggleExpand(memberId: string) {
+    setExpandedMembers(prev => {
+      const next = new Set(prev)
+      next.has(memberId) ? next.delete(memberId) : next.add(memberId)
+      return next
+    })
+  }
 
   const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -93,11 +102,6 @@ export default function AdminMetricsPage() {
     }
   }
 
-  const filtered = selectedMember === 'all'
-    ? entries
-    : entries.filter(e => e.member_id === selectedMember)
-
-  const sorted = [...filtered].sort((a, b) => a.recorded_at.localeCompare(b.recorded_at))
 
   const openAdd = () => {
     setEditTarget(null)
@@ -219,7 +223,7 @@ export default function AdminMetricsPage() {
             <thead>
               <tr className="border-b border-gray-100 text-left">
                 <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1.5rem' }}>Member</th>
-                <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1rem' }}>Date</th>
+                <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1rem' }}>Latest Date</th>
                 <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1rem' }}>10YD Fly</th>
                 <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1rem' }}>Game Speed</th>
                 <th className="text-xs font-semibold text-gray-400 uppercase tracking-wide" style={{ padding: '0.875rem 1rem' }}>Vertical</th>
@@ -229,44 +233,94 @@ export default function AdminMetricsPage() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((e, i) => (
-                <tr key={e.id} className={`border-b border-gray-50 hover:bg-gray-50 transition ${i === sorted.length - 1 ? 'border-b-0' : ''}`}>
-                  <td style={{ padding: '1rem 1.5rem' }}>
-                    <span className="font-medium text-gray-900">{memberLabel(members, e.member_id)}</span>
-                  </td>
-                  <td className="text-gray-600" style={{ padding: '1rem' }}>{formatDate(e.recorded_at)}</td>
-                  <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{e.fly_10yd != null ? `${e.fly_10yd}s` : '—'}</td>
-                  <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{e.game_speed != null ? `${e.game_speed} mph` : '—'}</td>
-                  <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{e.vertical != null ? `${e.vertical}"` : '—'}</td>
-                  <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{e.broad_jump != null ? `${e.broad_jump}"` : '—'}</td>
-                  <td style={{ padding: '1rem' }}>
-                    {e.overall_progress != null ? (
-                      <span className="inline-block bg-gray-900 text-white text-xs font-semibold rounded-lg" style={{ padding: '0.2rem 0.6rem' }}>
-                        {e.overall_progress}
-                      </span>
-                    ) : '—'}
-                  </td>
-                  <td style={{ padding: '1rem 1.5rem' }}>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => openEdit(e)}
-                        className="text-xs font-medium text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition"
-                        style={{ padding: '0.3rem 0.75rem' }}>
-                        Edit
-                      </button>
-                      <button onClick={() => setDeleteTarget(e)}
-                        className="text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition"
-                        style={{ padding: '0.3rem 0.75rem' }}>
-                        Delete
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="text-center text-gray-400 text-sm" style={{ padding: '3rem' }}>No entries found.</td>
-                </tr>
-              )}
+              {(() => {
+                // Group entries by member, each member shows latest entry + expandable history
+                const filtered = selectedMember === 'all' ? entries : entries.filter(e => e.member_id === selectedMember)
+                const byMember = new Map<string, MetricEntry[]>()
+                filtered.forEach(e => {
+                  if (!byMember.has(e.member_id)) byMember.set(e.member_id, [])
+                  byMember.get(e.member_id)!.push(e)
+                })
+                // Sort each member's entries newest first
+                byMember.forEach((v, k) => byMember.set(k, v.sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))))
+
+                if (byMember.size === 0) return (
+                  <tr><td colSpan={8} className="text-center text-gray-400 text-sm" style={{ padding: '3rem' }}>No entries found.</td></tr>
+                )
+
+                const rows: React.ReactNode[] = []
+                byMember.forEach((memberEntries, memberId) => {
+                  const latest = memberEntries[0]
+                  const isExpanded = expandedMembers.has(memberId)
+                  const hasHistory = memberEntries.length > 1
+
+                  // Summary row (latest entry)
+                  rows.push(
+                    <tr key={`summary-${memberId}`} className="border-b border-gray-50 hover:bg-gray-50 transition">
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{memberLabel(members, memberId)}</span>
+                          {hasHistory && (
+                            <button
+                              onClick={() => toggleExpand(memberId)}
+                              className="text-xs text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition flex items-center gap-1"
+                              style={{ padding: '0.15rem 0.5rem' }}
+                            >
+                              {isExpanded ? '▲' : '▼'} {memberEntries.length} entries
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-gray-600" style={{ padding: '1rem' }}>{formatDate(latest.recorded_at)}</td>
+                      <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{latest.fly_10yd != null ? `${latest.fly_10yd}s` : '—'}</td>
+                      <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{latest.game_speed != null ? `${latest.game_speed} mph` : '—'}</td>
+                      <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{latest.vertical != null ? `${latest.vertical}"` : '—'}</td>
+                      <td className="text-gray-700 font-medium" style={{ padding: '1rem' }}>{latest.broad_jump != null ? `${latest.broad_jump}"` : '—'}</td>
+                      <td style={{ padding: '1rem' }}>
+                        {latest.overall_progress != null ? (
+                          <span className="inline-block bg-gray-900 text-white text-xs font-semibold rounded-lg" style={{ padding: '0.2rem 0.6rem' }}>{latest.overall_progress}</span>
+                        ) : '—'}
+                      </td>
+                      <td style={{ padding: '1rem 1.5rem' }}>
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openEdit(latest)} className="text-xs font-medium text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition" style={{ padding: '0.3rem 0.75rem' }}>Edit</button>
+                          <button onClick={() => setDeleteTarget(latest)} className="text-xs font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition" style={{ padding: '0.3rem 0.75rem' }}>Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+
+                  // History rows (older entries, shown when expanded)
+                  if (isExpanded && hasHistory) {
+                    memberEntries.slice(1).forEach(e => {
+                      rows.push(
+                        <tr key={`history-${e.id}`} className="border-b border-gray-50 bg-gray-50/60">
+                          <td style={{ padding: '0.75rem 1.5rem' }}>
+                            <span className="text-xs text-gray-400 pl-4">↳ {formatDate(e.recorded_at)}</span>
+                          </td>
+                          <td className="text-gray-500 text-xs" style={{ padding: '0.75rem 1rem' }}>{formatDate(e.recorded_at)}</td>
+                          <td className="text-gray-500 text-xs" style={{ padding: '0.75rem 1rem' }}>{e.fly_10yd != null ? `${e.fly_10yd}s` : '—'}</td>
+                          <td className="text-gray-500 text-xs" style={{ padding: '0.75rem 1rem' }}>{e.game_speed != null ? `${e.game_speed} mph` : '—'}</td>
+                          <td className="text-gray-500 text-xs" style={{ padding: '0.75rem 1rem' }}>{e.vertical != null ? `${e.vertical}"` : '—'}</td>
+                          <td className="text-gray-500 text-xs" style={{ padding: '0.75rem 1rem' }}>{e.broad_jump != null ? `${e.broad_jump}"` : '—'}</td>
+                          <td style={{ padding: '0.75rem 1rem' }}>
+                            {e.overall_progress != null ? (
+                              <span className="inline-block bg-gray-200 text-gray-600 text-xs font-semibold rounded-lg" style={{ padding: '0.2rem 0.6rem' }}>{e.overall_progress}</span>
+                            ) : '—'}
+                          </td>
+                          <td style={{ padding: '0.75rem 1.5rem' }}>
+                            <div className="flex items-center gap-2">
+                              <button onClick={() => openEdit(e)} className="text-xs font-medium text-gray-400 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-lg transition" style={{ padding: '0.3rem 0.75rem' }}>Edit</button>
+                              <button onClick={() => setDeleteTarget(e)} className="text-xs font-medium text-red-400 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition" style={{ padding: '0.3rem 0.75rem' }}>Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  }
+                })
+                return rows
+              })()}
             </tbody>
           </table>
         </div>
@@ -276,9 +330,15 @@ export default function AdminMetricsPage() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg" style={{ padding: '2rem' }}>
-            <h3 className="text-lg font-bold text-gray-900 mb-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
               {editTarget ? 'Edit Metric Entry' : 'Add Metric Entry'}
             </h3>
+
+            {editTarget && (
+              <div className="mb-4 bg-yellow-50 border border-yellow-100 text-yellow-700 text-xs rounded-xl" style={{ padding: '0.6rem 1rem' }}>
+                You are editing an existing entry. To add a new session, close this and use <span className="font-semibold">+ Add Entry</span>.
+              </div>
+            )}
 
             {modalError && (
               <div className="mb-4 bg-red-50 border border-red-100 text-red-700 text-sm rounded-xl" style={{ padding: '0.75rem 1rem' }}>

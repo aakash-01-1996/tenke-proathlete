@@ -30,6 +30,7 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
   const [bookingsCount, setBookingsCount] = useState(0)
   const [inquiriesCount, setInquiriesCount] = useState(0)
   const [contactsCount, setContactsCount] = useState(0)
+  const [reportsCount, setReportsCount] = useState(0)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -74,11 +75,12 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         // Fetch badge counts in parallel (best-effort)
         const api = process.env.NEXT_PUBLIC_API_URL
         const headers = { Authorization: `Bearer ${token}` }
-        const [reqRes, bookRes, inqRes, conRes] = await Promise.allSettled([
+        const [reqRes, bookRes, inqRes, conRes, repRes] = await Promise.allSettled([
           fetch(`${api}/day-change-requests/?status_filter=pending`, { headers }),
           fetch(`${api}/bookings/`, { headers }),
           fetch(`${api}/inquiries/`, { headers }),
           fetch(`${api}/contact-messages/`, { headers }),
+          fetch(`${api}/community/reports`, { headers }),
         ])
         if (reqRes.status === 'fulfilled' && reqRes.value.ok) {
           const d = await reqRes.value.json()
@@ -95,6 +97,10 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         if (conRes.status === 'fulfilled' && conRes.value.ok) {
           const d = await conRes.value.json()
           setContactsCount(d.length)
+        }
+        if (repRes.status === 'fulfilled' && repRes.value.ok) {
+          const d = await repRes.value.json()
+          setReportsCount(d.length)
         }
       } catch {
         // Network or unexpected error — don't redirect, let them stay and retry
@@ -133,7 +139,8 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
               href === '/admin/requests'  ? pendingCount  :
               href === '/admin/bookings'  ? bookingsCount :
               href === '/admin/inquiries' ? inquiriesCount :
-              href === '/admin/contacts'  ? contactsCount  : 0
+              href === '/admin/contacts'  ? contactsCount  :
+              href === '/admin/community' ? reportsCount   : 0
             return (
               <Link
                 key={href}

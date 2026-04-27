@@ -47,6 +47,14 @@ type ExerciseForm = {
   duration: string
 }
 
+type WeightLog = {
+  id: string
+  exercise_id: string
+  weight: string
+  logged_at: string
+  created_at: string
+}
+
 type MetricEntry = {
   id: string
   member_id: string
@@ -88,7 +96,11 @@ function fmtVal(val: number | null, unit: string, decimals = 0) {
 
 // ── SVG Progress Graph ───────────────────────────────────────────────────────
 
-function ProgressGraph({ data }: { data: { label: string; score: number }[] }) {
+type GraphPoint = { label: string; score: number; entry: MetricEntry }
+
+function ProgressGraph({ data }: { data: GraphPoint[] }) {
+  const [active, setActive] = useState<GraphPoint | null>(null)
+
   if (data.length === 0) return (
     <div className="flex items-center justify-center h-32 text-gray-300 text-sm">No progress data yet</div>
   )
@@ -118,25 +130,47 @@ function ProgressGraph({ data }: { data: { label: string; score: number }[] }) {
   })
 
   return (
-    <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
-      {gridLines.map(g => (
-        <g key={g.label}>
-          <line x1={padLeft} y1={g.y} x2={width - padRight} y2={g.y} stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4 3" />
-          <text x={padLeft - 6} y={g.y + 4} textAnchor="end" fontSize={10} fill="#9ca3af">{g.label}</text>
-        </g>
-      ))}
-      {data.length > 1 && (
-        <path d={pathD} fill="none" stroke="#1f2937" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+    <div>
+      <svg width="100%" viewBox={`0 0 ${width} ${height}`} className="overflow-visible">
+        {gridLines.map(g => (
+          <g key={g.label}>
+            <line x1={padLeft} y1={g.y} x2={width - padRight} y2={g.y} stroke="#e5e7eb" strokeWidth={1} strokeDasharray="4 3" />
+            <text x={padLeft - 6} y={g.y + 4} textAnchor="end" fontSize={10} fill="#9ca3af">{g.label}</text>
+          </g>
+        ))}
+        {data.length > 1 && (
+          <path d={pathD} fill="none" stroke="#1f2937" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {data.map((d, i) => {
+          const isActive = active?.entry.id === d.entry.id
+          return (
+            <g key={i} onClick={() => setActive(isActive ? null : d)} style={{ cursor: 'pointer' }}>
+              {/* Invisible larger hit area */}
+              <circle cx={toX(i)} cy={toY(d.score)} r={14} fill="transparent" />
+              <circle cx={toX(i)} cy={toY(d.score)} r={isActive ? 7 : 5} fill="#1f2937" />
+              <circle cx={toX(i)} cy={toY(d.score)} r={isActive ? 4 : 3} fill={isActive ? '#facc15' : 'white'} />
+              <text x={toX(i)} y={toY(d.score) - 12} textAnchor="middle" fontSize={10} fill="#374151" fontWeight={600}>{d.score}</text>
+              <text x={toX(i)} y={height - padBottom + 16} textAnchor="middle" fontSize={11} fill="#6b7280">{d.label}</text>
+            </g>
+          )
+        })}
+      </svg>
+
+      {/* Detail card — shown when a point is clicked */}
+      {active && (
+        <div className="mt-4 bg-gray-50 border border-gray-200 rounded-2xl flex flex-wrap gap-x-6 gap-y-2" style={{ padding: '0.875rem 1.25rem' }}>
+          <div className="flex items-center gap-2 w-full justify-between">
+            <p className="text-xs font-bold text-gray-700">{active.label}</p>
+            <button onClick={() => setActive(null)} className="text-gray-300 hover:text-gray-500 text-sm">✕</button>
+          </div>
+          {active.entry.fly_10yd != null && <div><p className="text-xs text-gray-400 mb-0.5">10YD Fly</p><p className="text-sm font-semibold text-gray-800">{active.entry.fly_10yd}s</p></div>}
+          {active.entry.game_speed != null && <div><p className="text-xs text-gray-400 mb-0.5">Game Speed</p><p className="text-sm font-semibold text-gray-800">{active.entry.game_speed} mph</p></div>}
+          {active.entry.vertical != null && <div><p className="text-xs text-gray-400 mb-0.5">Vertical</p><p className="text-sm font-semibold text-gray-800">{active.entry.vertical}"</p></div>}
+          {active.entry.broad_jump != null && <div><p className="text-xs text-gray-400 mb-0.5">Broad Jump</p><p className="text-sm font-semibold text-gray-800">{active.entry.broad_jump}"</p></div>}
+          {active.entry.overall_progress != null && <div><p className="text-xs text-gray-400 mb-0.5">Overall</p><p className="text-sm font-bold text-gray-900">{active.entry.overall_progress}</p></div>}
+        </div>
       )}
-      {data.map((d, i) => (
-        <g key={i}>
-          <circle cx={toX(i)} cy={toY(d.score)} r={5} fill="#1f2937" />
-          <circle cx={toX(i)} cy={toY(d.score)} r={3} fill="white" />
-          <text x={toX(i)} y={toY(d.score) - 10} textAnchor="middle" fontSize={10} fill="#374151" fontWeight={600}>{d.score}</text>
-          <text x={toX(i)} y={height - padBottom + 16} textAnchor="middle" fontSize={11} fill="#6b7280">{d.label}</text>
-        </g>
-      ))}
-    </svg>
+    </div>
   )
 }
 
@@ -209,6 +243,12 @@ export default function AthletePage() {
   const [exForm, setExForm] = useState<ExerciseForm>({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
   const [exSaving, setExSaving] = useState(false)
   const [exDeleting, setExDeleting] = useState(false)
+
+  // Weight logs
+  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([])
+  const [weightInput, setWeightInput] = useState('')
+  const [weightSaving, setWeightSaving] = useState(false)
+  const [weightDeleting, setWeightDeleting] = useState<string | null>(null)
 
   const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -390,10 +430,12 @@ export default function AthletePage() {
 
   function openAddExercise(category: 'upper' | 'lower' | 'core') {
     setExForm({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
+    setWeightLogs([])
+    setWeightInput('')
     setExerciseModal({ open: true, category, editing: null })
   }
 
-  function openEditExercise(ex: Exercise) {
+  async function openEditExercise(ex: Exercise) {
     setExForm({
       name: ex.name,
       sets: ex.sets != null ? String(ex.sets) : '',
@@ -401,7 +443,53 @@ export default function AthletePage() {
       reps: ex.reps != null ? String(ex.reps) : '',
       duration: ex.duration ?? '',
     })
+    setWeightInput('')
     setExerciseModal({ open: true, category: ex.category, editing: ex })
+    // Fetch weight history
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/workout/${ex.member_id}/${ex.id}/logs`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setWeightLogs(res.ok ? await res.json() : [])
+    } catch {
+      setWeightLogs([])
+    }
+  }
+
+  async function logWeight() {
+    if (!m || !exerciseModal.editing || !weightInput.trim()) return
+    setWeightSaving(true)
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/workout/${m.id}/${exerciseModal.editing.id}/logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ weight: weightInput.trim() }),
+      })
+      if (res.ok) {
+        const newLog: WeightLog = await res.json()
+        setWeightLogs(prev => [newLog, ...prev])
+        setWeightInput('')
+      }
+    } finally {
+      setWeightSaving(false)
+    }
+  }
+
+  async function deleteWeightLog(logId: string) {
+    if (!m || !exerciseModal.editing) return
+    setWeightDeleting(logId)
+    try {
+      const token = await getToken()
+      await fetch(`${API}/workout/${m.id}/${exerciseModal.editing.id}/logs/${logId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setWeightLogs(prev => prev.filter(l => l.id !== logId))
+    } finally {
+      setWeightDeleting(null)
+    }
   }
 
   async function saveExercise() {
@@ -499,6 +587,7 @@ export default function AthletePage() {
     .map(e => ({
       label: new Date(e.recorded_at + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       score: e.overall_progress!,
+      entry: e,
     }))
 
   const isCoach = me?.role === 'coach' || me?.role === 'trainer'
@@ -669,7 +758,7 @@ export default function AthletePage() {
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Training Days</p>
                   <div className="flex items-center gap-1.5">
-                    {m.training_days.map(day => (
+                    {[...m.training_days].sort((a, b) => allDays.indexOf(a) - allDays.indexOf(b)).map(day => (
                       <span key={day} className="text-xs font-normal rounded-full bg-gray-900 text-white flex items-center justify-center"
                         style={{ width: day === 'Th' ? '2rem' : '1.75rem', height: '1.75rem' }}>
                         {day}
@@ -851,20 +940,25 @@ export default function AthletePage() {
                     <div key={cat} className="mb-6">
                       <p className="text-xs font-semibold text-gray-500 mb-3">{label}</p>
                       <div className="flex flex-wrap gap-3">
-                        {catExercises.map(ex => (
-                          <button
-                            key={ex.id}
-                            onClick={() => openEditExercise(ex)}
-                            className="bg-white border border-gray-200 rounded-2xl text-left hover:border-gray-400 hover:shadow-sm transition"
-                            style={{ padding: '0.875rem 1.1rem', minWidth: '120px' }}
-                          >
-                            <p className="text-sm font-semibold text-gray-900 mb-0.5">{ex.name}</p>
-                            <p className="text-xs text-gray-400">
-                              {ex.sets != null ? `${ex.sets} × ` : ''}
-                              {ex.reps != null ? `${ex.reps} reps` : ex.duration ?? '—'}
-                            </p>
-                          </button>
-                        ))}
+                        {catExercises.map(ex => {
+                          // Find latest weight for this exercise from all logs — not loaded here,
+                          // so we store them per exercise after opening. For tile display we
+                          // keep a lightweight map updated on log actions.
+                          return (
+                            <button
+                              key={ex.id}
+                              onClick={() => openEditExercise(ex)}
+                              className="bg-white border border-gray-200 rounded-2xl text-left hover:border-gray-400 hover:shadow-sm transition"
+                              style={{ padding: '0.875rem 1.1rem', minWidth: '120px' }}
+                            >
+                              <p className="text-sm font-semibold text-gray-900 mb-0.5">{ex.name}</p>
+                              <p className="text-xs text-gray-400">
+                                {ex.sets != null ? `${ex.sets} × ` : ''}
+                                {ex.reps != null ? `${ex.reps} reps` : ex.duration ?? '—'}
+                              </p>
+                            </button>
+                          )
+                        })}
                         {/* Add button */}
                         <button
                           onClick={() => openAddExercise(cat)}
@@ -942,6 +1036,59 @@ export default function AthletePage() {
                 )}
               </div>
             </div>
+            {/* ── Weight Log Section — only when editing ── */}
+            {exerciseModal.editing && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <div className="w-full h-px bg-gray-100 mb-4" />
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Weight History</p>
+
+                {/* Log new weight */}
+                <div className="flex gap-2 mb-3">
+                  <input
+                    value={weightInput}
+                    onChange={e => setWeightInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && logWeight()}
+                    placeholder="e.g. 45 lbs, 20 kg"
+                    className="flex-1 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                    style={{ padding: '0.5rem 0.875rem' }}
+                  />
+                  <button
+                    onClick={logWeight}
+                    disabled={weightSaving || !weightInput.trim()}
+                    className="text-sm font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-xl transition disabled:opacity-50 flex-shrink-0"
+                    style={{ padding: '0.5rem 1rem' }}
+                  >
+                    {weightSaving ? '...' : 'Log'}
+                  </button>
+                </div>
+
+                {/* History list */}
+                {weightLogs.length > 0 ? (
+                  <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto">
+                    {weightLogs.map(log => (
+                      <div key={log.id} className="flex items-center justify-between bg-gray-50 rounded-xl" style={{ padding: '0.4rem 0.75rem' }}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-gray-800">{log.weight}</span>
+                          <span className="text-xs text-gray-400">
+                            {new Date(log.logged_at + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => deleteWeightLog(log.id)}
+                          disabled={weightDeleting === log.id}
+                          className="text-gray-300 hover:text-red-400 transition text-xs disabled:opacity-50"
+                        >
+                          {weightDeleting === log.id ? '...' : '✕'}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-300 text-center" style={{ padding: '0.5rem 0' }}>No weight logged yet</p>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between" style={{ marginTop: '1.75rem' }}>
               {/* Delete — only when editing */}
               {exerciseModal.editing ? (

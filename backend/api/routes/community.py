@@ -1,13 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from typing import List
+from typing import List, Optional
 from uuid import UUID
+from datetime import datetime
+from pydantic import BaseModel
 
 from db.session import get_db
-from db.models import CommunityPost, CommunityComment, Member, User, UserRole
+from db.models import CommunityPost, CommunityComment, CommunityReport, Member, User, UserRole
 from db.schemas import PostCreate, PostOut, CommentCreate, CommentOut
-from api.dependencies import get_current_user, is_privileged
+from api.dependencies import get_current_user, is_privileged, require_coach_or_trainer
 
 router = APIRouter()
 
@@ -23,8 +25,19 @@ def _get_display_name(user: User, db: Session) -> str:
 
 
 @router.get("/", response_model=List[PostOut])
-def list_posts(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    posts = db.query(CommunityPost).order_by(CommunityPost.created_at.desc()).all()
+def list_posts(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    posts = (
+        db.query(CommunityPost)
+        .order_by(CommunityPost.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     result = []
     for post in posts:
         comments = db.query(CommunityComment).filter(
@@ -115,3 +128,138 @@ def delete_comment(post_id: UUID, comment_id: UUID, db: Session = Depends(get_db
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete comment.")
+
+
+# ── Reports ───────────────────────────────────────────────────────────────────
+
+class ReportIn(BaseModel):
+    reason: Optional[str] = None
+
+
+class ReportOut(BaseModel):
+    id: UUID
+    content_type: str
+    content_id: UUID
+    post_id: UUID
+    reported_by_email: str
+    reason: Optional[str]
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+@router.post("/{post_id}/report", response_model=ReportOut, status_code=status.HTTP_201_CREATED)
+def report_post(post_id: UUID, payload: ReportIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Report a post as offensive. Any authenticated user."""
+    post = db.query(CommunityPost).filter(CommunityPost.id == post_id).first()
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found.")
+    # Prevent duplicate pending report from same user
+    existing = db.query(CommunityReport).filter(
+        CommunityReport.content_id == post_id,
+        CommunityReport.reported_by_email == user.email,
+        CommunityReport.status == 'pending',
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="You have already reported this.")
+    try:
+        report = CommunityReport(
+            content_type='post',
+            content_id=post_id,
+            post_id=post_id,
+            reported_by_email=user.email,
+            reason=payload.reason.strip() if payload.reason else None,
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        return report
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to submit report.")
+
+
+@router.post("/{post_id}/comments/{comment_id}/report", response_model=ReportOut, status_code=status.HTTP_201_CREATED)
+def report_comment(post_id: UUID, comment_id: UUID, payload: ReportIn, db: Session = Depends(get_db), user=Depends(get_current_user)):
+    """Report a comment as offensive. Any authenticated user."""
+    comment = db.query(CommunityComment).filter(
+        CommunityComment.id == comment_id,
+        CommunityComment.post_id == post_id,
+    ).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="Comment not found.")
+    existing = db.query(CommunityReport).filter(
+        CommunityReport.content_id == comment_id,
+        CommunityReport.reported_by_email == user.email,
+        CommunityReport.status == 'pending',
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="You have already reported this.")
+    try:
+        report = CommunityReport(
+            content_type='comment',
+            content_id=comment_id,
+            post_id=post_id,
+            reported_by_email=user.email,
+            reason=payload.reason.strip() if payload.reason else None,
+        )
+        db.add(report)
+        db.commit()
+        db.refresh(report)
+        return report
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to submit report.")
+
+
+@router.get("/reports", response_model=List[ReportOut])
+def list_reports(db: Session = Depends(get_db), user=Depends(require_coach_or_trainer)):
+    """List all pending reports. Coach/trainer only."""
+    return (
+        db.query(CommunityReport)
+        .filter(CommunityReport.status == 'pending')
+        .order_by(CommunityReport.created_at.desc())
+        .all()
+    )
+
+
+@router.patch("/reports/{report_id}", response_model=ReportOut)
+def handle_report(
+    report_id: UUID,
+    action: str = Query(..., pattern="^(dismiss|delete)$"),
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """
+    Handle a report. action=dismiss closes it. action=delete removes the content and closes it.
+    Coach/trainer only.
+    """
+    report = db.query(CommunityReport).filter(CommunityReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found.")
+    try:
+        if action == 'delete':
+            if report.content_type == 'post':
+                post = db.query(CommunityPost).filter(CommunityPost.id == report.content_id).first()
+                if post:
+                    db.delete(post)
+                # Also dismiss all reports for this post
+                db.query(CommunityReport).filter(
+                    CommunityReport.post_id == report.post_id,
+                    CommunityReport.status == 'pending',
+                ).update({'status': 'dismissed'}, synchronize_session=False)
+            else:
+                comment = db.query(CommunityComment).filter(CommunityComment.id == report.content_id).first()
+                if comment:
+                    db.delete(comment)
+                report.status = 'dismissed'
+        else:
+            report.status = 'dismissed'
+        db.commit()
+        db.refresh(report)
+        return report
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to handle report.")

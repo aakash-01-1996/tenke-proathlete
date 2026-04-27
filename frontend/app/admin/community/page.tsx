@@ -27,6 +27,17 @@ interface Post {
   comments: Comment[]
 }
 
+interface Report {
+  id: string
+  content_type: 'post' | 'comment'
+  content_id: string
+  post_id: string
+  reported_by_email: string
+  reason: string | null
+  status: string
+  created_at: string
+}
+
 const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
 
 const formatTime = (iso: string) => {
@@ -39,13 +50,17 @@ const formatTime = (iso: string) => {
 }
 
 export default function CommunityModerationPage() {
+  const [tab, setTab] = useState<'posts' | 'reports'>('posts')
   const [posts, setPosts] = useState<Post[]>([])
+  const [reports, setReports] = useState<Report[]>([])
   const [loading, setLoading] = useState(true)
+  const [reportsLoading, setReportsLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set())
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'post' | 'comment'; postId: string; commentId?: string; label: string } | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [handlingReport, setHandlingReport] = useState<string | null>(null)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
@@ -56,16 +71,29 @@ export default function CommunityModerationPage() {
 
   const fetchPosts = useCallback(async (tok: string) => {
     try {
-      const res = await fetch(`${API}/community/`, { headers: { Authorization: `Bearer ${tok}` } })
+      const res = await fetch(`${API}/community/?skip=0&limit=100`, { headers: { Authorization: `Bearer ${tok}` } })
       if (res.ok) setPosts(await res.json())
     } finally {
       setLoading(false)
     }
   }, [])
 
+  const fetchReports = useCallback(async (tok: string) => {
+    setReportsLoading(true)
+    try {
+      const res = await fetch(`${API}/community/reports`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (res.ok) setReports(await res.json())
+    } finally {
+      setReportsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    if (token) fetchPosts(token)
-  }, [token, fetchPosts])
+    if (token) {
+      fetchPosts(token)
+      fetchReports(token)
+    }
+  }, [token, fetchPosts, fetchReports])
 
   const confirmDelete = async () => {
     if (!token || !deleteTarget) return
@@ -86,6 +114,20 @@ export default function CommunityModerationPage() {
       await fetchPosts(token)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleReport = async (reportId: string, action: 'dismiss' | 'delete') => {
+    if (!token) return
+    setHandlingReport(reportId)
+    try {
+      await fetch(`${API}/community/reports/${reportId}?action=${action}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      await Promise.all([fetchReports(token), fetchPosts(token)])
+    } finally {
+      setHandlingReport(null)
     }
   }
 
@@ -111,6 +153,79 @@ export default function CommunityModerationPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6">
+        <button
+          onClick={() => setTab('posts')}
+          className={`text-sm font-medium rounded-xl transition ${tab === 'posts' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:text-gray-900'}`}
+          style={{ padding: '0.5rem 1.25rem' }}
+        >
+          Posts
+        </button>
+        <button
+          onClick={() => setTab('reports')}
+          className={`text-sm font-medium rounded-xl transition flex items-center gap-2 ${tab === 'reports' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:text-gray-900'}`}
+          style={{ padding: '0.5rem 1.25rem' }}
+        >
+          Reports
+          {reports.length > 0 && (
+            <span className={`text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center ${tab === 'reports' ? 'bg-yellow-400 text-gray-900' : 'bg-red-500 text-white'}`}>
+              {reports.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {tab === 'reports' ? (
+        <div className="flex flex-col gap-4">
+          {reportsLoading ? (
+            <FeedSkeleton items={3} />
+          ) : reports.length === 0 ? (
+            <div className="text-center text-gray-400 text-sm" style={{ padding: '3rem' }}>No pending reports.</div>
+          ) : reports.map(report => (
+            <div key={report.id} className="bg-white rounded-2xl shadow-sm" style={{ padding: '1.25rem 1.5rem' }}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${report.content_type === 'post' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                      {report.content_type}
+                    </span>
+                    <span className="text-xs text-gray-400">{formatTime(report.created_at)}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-1">
+                    Reported by <span className="font-medium text-gray-700">{report.reported_by_email}</span>
+                  </p>
+                  {report.reason && (
+                    <p className="text-sm text-gray-700 bg-gray-50 rounded-xl" style={{ padding: '0.5rem 0.75rem' }}>
+                      &ldquo;{report.reason}&rdquo;
+                    </p>
+                  )}
+                  {!report.reason && <p className="text-xs text-gray-400 italic">No reason provided</p>}
+                </div>
+                <div className="flex gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => handleReport(report.id, 'dismiss')}
+                    disabled={handlingReport === report.id}
+                    className="text-xs font-medium text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.4rem 0.875rem' }}
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={() => handleReport(report.id, 'delete')}
+                    disabled={handlingReport === report.id}
+                    className="text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.4rem 0.875rem' }}
+                  >
+                    {handlingReport === report.id ? '...' : 'Delete Content'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <>
       <div style={{ marginBottom: '2rem' }}>
         <input
           value={search}
@@ -212,6 +327,8 @@ export default function CommunityModerationPage() {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   )

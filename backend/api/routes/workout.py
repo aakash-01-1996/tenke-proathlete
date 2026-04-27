@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 from pydantic import BaseModel
 
 from db.session import get_db
-from db.models import WorkoutExercise, Member
+from db.models import WorkoutExercise, Member, ExerciseWeightLog
 from api.dependencies import get_current_user
 
 router = APIRouter()
@@ -33,6 +33,22 @@ class ExerciseOut(BaseModel):
     sets: Optional[int]
     reps: Optional[int]
     duration: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WeightLogIn(BaseModel):
+    weight: str            # e.g. "45 lbs", "20 kg"
+    logged_at: Optional[date] = None   # defaults to today if omitted
+
+
+class WeightLogOut(BaseModel):
+    id: UUID
+    exercise_id: UUID
+    weight: str
+    logged_at: date
     created_at: datetime
 
     class Config:
@@ -154,3 +170,73 @@ def delete_exercise(
     except SQLAlchemyError:
         db.rollback()
         raise HTTPException(status_code=500, detail="Failed to delete exercise.")
+
+
+# ── Weight Log Routes ─────────────────────────────────────────────────────────
+
+@router.get("/{member_id}/{exercise_id}/logs", response_model=List[WeightLogOut])
+def list_weight_logs(
+    member_id: UUID,
+    exercise_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Get full weight history for an exercise, newest first."""
+    _exercise_or_404(exercise_id, member_id, db)
+    return (
+        db.query(ExerciseWeightLog)
+        .filter(ExerciseWeightLog.exercise_id == exercise_id)
+        .order_by(ExerciseWeightLog.logged_at.desc())
+        .all()
+    )
+
+
+@router.post("/{member_id}/{exercise_id}/logs", response_model=WeightLogOut, status_code=status.HTTP_201_CREATED)
+def log_weight(
+    member_id: UUID,
+    exercise_id: UUID,
+    payload: WeightLogIn,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Log a weight entry for an exercise."""
+    if not payload.weight.strip():
+        raise HTTPException(status_code=422, detail="Weight is required.")
+    _exercise_or_404(exercise_id, member_id, db)
+    try:
+        log = ExerciseWeightLog(
+            exercise_id=exercise_id,
+            weight=payload.weight.strip(),
+            logged_at=payload.logged_at or date.today(),
+        )
+        db.add(log)
+        db.commit()
+        db.refresh(log)
+        return log
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to log weight.")
+
+
+@router.delete("/{member_id}/{exercise_id}/logs/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_weight_log(
+    member_id: UUID,
+    exercise_id: UUID,
+    log_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Delete a single weight log entry."""
+    _exercise_or_404(exercise_id, member_id, db)
+    log = db.query(ExerciseWeightLog).filter(
+        ExerciseWeightLog.id == log_id,
+        ExerciseWeightLog.exercise_id == exercise_id,
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="Weight log not found.")
+    try:
+        db.delete(log)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete weight log.")

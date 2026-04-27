@@ -5,6 +5,9 @@ Tests for workout endpoints:
   POST  /workout/{member_id}
   PUT   /workout/{member_id}/{exercise_id}
   DELETE /workout/{member_id}/{exercise_id}
+  GET   /workout/{member_id}/{exercise_id}/logs
+  POST  /workout/{member_id}/{exercise_id}/logs
+  DELETE /workout/{member_id}/{exercise_id}/logs/{log_id}
 """
 
 from tests.conftest import auth_patch, make_coach_token, make_member_token
@@ -204,3 +207,116 @@ def test_delete_exercise_member_can_delete(client, db, coach_user, member_user):
     with auth_patch(MEMBER_DECODED):
         res = client.delete(f"/workout/{m.id}/{ex['id']}", headers={"Authorization": MEMBER_TOKEN})
     assert res.status_code == 204
+
+
+# ── GET /workout/{member_id}/{exercise_id}/logs ───────────────────────────────
+
+def test_list_weight_logs_empty(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        res = client.get(f"/workout/{m.id}/{ex['id']}/logs", headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_list_weight_logs_returns_all(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "45 lbs"}, headers={"Authorization": COACH_TOKEN})
+        client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "50 lbs"}, headers={"Authorization": COACH_TOKEN})
+        res = client.get(f"/workout/{m.id}/{ex['id']}/logs", headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 200
+    assert len(res.json()) == 2
+
+
+def test_list_weight_logs_exercise_not_found(client, db, coach_user):
+    m = create_member(db)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    with auth_patch(COACH_DECODED):
+        res = client.get(f"/workout/{m.id}/{fake_id}/logs", headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 404
+
+
+# ── POST /workout/{member_id}/{exercise_id}/logs ──────────────────────────────
+
+def test_log_weight(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        res = client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "45 lbs"}, headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 201
+    data = res.json()
+    assert data["weight"] == "45 lbs"
+    assert data["exercise_id"] == ex["id"]
+    assert data["logged_at"] is not None
+
+
+def test_log_weight_with_date(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        res = client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "50 lbs", "logged_at": "2026-03-15"}, headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 201
+    assert res.json()["logged_at"] == "2026-03-15"
+
+
+def test_log_weight_empty_string(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        res = client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "  "}, headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 422
+
+
+def test_log_weight_member_can_log(client, db, coach_user, member_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+    with auth_patch(MEMBER_DECODED):
+        res = client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "45 lbs"}, headers={"Authorization": MEMBER_TOKEN})
+    assert res.status_code == 201
+
+
+def test_log_weight_exercise_not_found(client, db, coach_user):
+    m = create_member(db)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    with auth_patch(COACH_DECODED):
+        res = client.post(f"/workout/{m.id}/{fake_id}/logs", json={"weight": "45 lbs"}, headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 404
+
+
+# ── DELETE /workout/{member_id}/{exercise_id}/logs/{log_id} ──────────────────
+
+def test_delete_weight_log(client, db, coach_user):
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        log = client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "45 lbs"}, headers={"Authorization": COACH_TOKEN}).json()
+        del_res = client.delete(f"/workout/{m.id}/{ex['id']}/logs/{log['id']}", headers={"Authorization": COACH_TOKEN})
+        list_res = client.get(f"/workout/{m.id}/{ex['id']}/logs", headers={"Authorization": COACH_TOKEN})
+    assert del_res.status_code == 204
+    assert list_res.json() == []
+
+
+def test_delete_weight_log_not_found(client, db, coach_user):
+    m = create_member(db)
+    fake_id = "00000000-0000-0000-0000-000000000000"
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        res = client.delete(f"/workout/{m.id}/{ex['id']}/logs/{fake_id}", headers={"Authorization": COACH_TOKEN})
+    assert res.status_code == 404
+
+
+def test_delete_exercise_cascades_weight_logs(client, db, coach_user):
+    """Deleting an exercise should also delete all its weight logs."""
+    m = create_member(db)
+    with auth_patch(COACH_DECODED):
+        ex = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        client.post(f"/workout/{m.id}/{ex['id']}/logs", json={"weight": "45 lbs"}, headers={"Authorization": COACH_TOKEN})
+        client.delete(f"/workout/{m.id}/{ex['id']}", headers={"Authorization": COACH_TOKEN})
+        # Re-adding the exercise should show no logs
+        ex2 = client.post(f"/workout/{m.id}", json=VALID_EXERCISE, headers={"Authorization": COACH_TOKEN}).json()
+        logs = client.get(f"/workout/{m.id}/{ex2['id']}/logs", headers={"Authorization": COACH_TOKEN}).json()
+    assert logs == []

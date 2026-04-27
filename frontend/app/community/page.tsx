@@ -27,9 +27,13 @@ interface Post {
   comments: Comment[]
 }
 
+const PAGE_SIZE = 20
+
 export default function CommunityPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [token, setToken] = useState<string | null>(null)
   const [myEmail, setMyEmail] = useState<string | null>(null)
   const [myRole, setMyRole] = useState<string | null>(null)
@@ -42,6 +46,11 @@ export default function CommunityPage() {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [commentInputs, setCommentInputs] = useState<{ [id: string]: string }>({})
   const [commentPosting, setCommentPosting] = useState<string | null>(null)
+  const [deletingComment, setDeletingComment] = useState<string | null>(null)
+  const [reportModal, setReportModal] = useState<{ type: 'post' | 'comment'; postId: string; commentId?: string } | null>(null)
+  const [reportReason, setReportReason] = useState('')
+  const [reportSending, setReportSending] = useState(false)
+  const [reportSent, setReportSent] = useState(false)
 
   const editorRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -64,12 +73,33 @@ export default function CommunityPage() {
 
   const fetchPosts = useCallback(async (tok: string) => {
     try {
-      const res = await fetch(`${API}/community/`, { headers: { Authorization: `Bearer ${tok}` } })
-      if (res.ok) setPosts(await res.json())
+      const res = await fetch(`${API}/community/?skip=0&limit=${PAGE_SIZE}`, { headers: { Authorization: `Bearer ${tok}` } })
+      if (res.ok) {
+        const data: Post[] = await res.json()
+        setPosts(data)
+        setHasMore(data.length === PAGE_SIZE)
+      }
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const loadMore = async () => {
+    if (!token || loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const res = await fetch(`${API}/community/?skip=${posts.length}&limit=${PAGE_SIZE}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data: Post[] = await res.json()
+        setPosts(prev => [...prev, ...data])
+        setHasMore(data.length === PAGE_SIZE)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   useEffect(() => {
     if (token) fetchPosts(token)
@@ -161,8 +191,53 @@ export default function CommunityPage() {
     }
   }
 
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    if (!token) return
+    setDeletingComment(commentId)
+    try {
+      await fetch(`${API}/community/${postId}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setPosts(prev => prev.map(p =>
+        p.id === postId ? { ...p, comments: p.comments.filter(c => c.id !== commentId) } : p
+      ))
+    } finally {
+      setDeletingComment(null)
+    }
+  }
+
   const canDelete = (post: Post) =>
     post.author_email === myEmail || myRole === 'coach' || myRole === 'trainer'
+
+  const canDeleteComment = (comment: Comment) =>
+    comment.author_email === myEmail || myRole === 'coach' || myRole === 'trainer'
+
+  const openReport = (type: 'post' | 'comment', postId: string, commentId?: string) => {
+    setReportReason('')
+    setReportSent(false)
+    setReportModal({ type, postId, commentId })
+    setOpenMenuId(null)
+  }
+
+  const submitReport = async () => {
+    if (!token || !reportModal) return
+    setReportSending(true)
+    try {
+      const url = reportModal.type === 'post'
+        ? `${API}/community/${reportModal.postId}/report`
+        : `${API}/community/${reportModal.postId}/comments/${reportModal.commentId}/report`
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reportReason.trim() || null }),
+      })
+      if (res.status === 409) { setReportSent(true); return } // already reported — still show success
+      if (res.ok) setReportSent(true)
+    } finally {
+      setReportSending(false)
+    }
+  }
 
   const formatTime = (iso: string) => {
     const d = new Date(iso)
@@ -230,7 +305,7 @@ export default function CommunityPage() {
         ) : posts.length === 0 ? (
           <div className="text-center text-gray-400 text-sm" style={{ padding: '3rem' }}>No posts yet. Be the first to share!</div>
         ) : (
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6" onClick={() => setOpenMenuId(null)}>
             {posts.map((post) => (
               <div key={post.id} className="bg-white rounded-2xl shadow-sm" style={{ padding: '1.5rem' }}>
                 <div className="flex items-center justify-between mb-4">
@@ -244,20 +319,34 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
-                  {canDelete(post) && (
-                    <div className="relative">
-                      <button onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)} className="text-gray-400 hover:text-gray-600 transition p-1 rounded-lg hover:bg-gray-100">
-                        ···
+                  <div className="flex items-center gap-1">
+                    {/* Report button — members only (coaches just delete directly) */}
+                    {myRole === 'member' && post.author_email !== myEmail && (
+                      <button
+                        onClick={() => openReport('post', post.id)}
+                        className="text-gray-300 hover:text-orange-400 transition p-1.5 rounded-lg hover:bg-gray-100"
+                        title="Report post"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                        </svg>
                       </button>
-                      {openMenuId === post.id && (
-                        <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-xl shadow-lg z-10 min-w-[140px]">
-                          <button onClick={() => handleDelete(post.id)} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-gray-50 rounded-xl transition">
-                            Delete Post
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    )}
+                    {canDelete(post) && (
+                      <div className="relative">
+                        <button onClick={() => setOpenMenuId(openMenuId === post.id ? null : post.id)} className="text-gray-400 hover:text-gray-600 transition p-1 rounded-lg hover:bg-gray-100">
+                          ···
+                        </button>
+                        {openMenuId === post.id && (
+                          <div className="absolute right-0 top-8 bg-white border border-gray-200 rounded-xl shadow-lg z-10 min-w-[140px]">
+                            <button onClick={() => handleDelete(post.id)} className="w-full text-left px-4 py-3 text-sm text-red-600 hover:bg-gray-50 rounded-xl transition">
+                              Delete Post
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="text-gray-800 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: post.content }} />
@@ -270,13 +359,35 @@ export default function CommunityPage() {
                   {post.comments.length > 0 && (
                     <div className="flex flex-col gap-3 mb-4">
                       {post.comments.map((comment) => (
-                        <div key={comment.id} className="flex items-start gap-2">
+                        <div key={comment.id} className="flex items-start gap-2 group">
                           <div className="w-7 h-7 rounded-full bg-gray-600 flex items-center justify-center text-white font-bold flex-shrink-0" style={{ fontSize: '0.65rem' }}>
                             {comment.author_name[0].toUpperCase()}
                           </div>
                           <div className="bg-gray-100 rounded-xl px-3 py-2 text-sm text-gray-800 flex-1">
                             <span className="font-semibold">{comment.author_name} </span>
                             {comment.content}
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition flex-shrink-0 mt-1">
+                            {myRole === 'member' && comment.author_email !== myEmail && (
+                              <button
+                                onClick={() => openReport('comment', post.id, comment.id)}
+                                className="text-gray-300 hover:text-orange-400 transition"
+                                title="Report comment"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
+                                </svg>
+                              </button>
+                            )}
+                            {canDeleteComment(comment) && (
+                              <button
+                                onClick={() => handleDeleteComment(post.id, comment.id)}
+                                disabled={deletingComment === comment.id}
+                                className="text-gray-300 hover:text-red-400 transition text-xs disabled:opacity-50"
+                              >
+                                {deletingComment === comment.id ? '...' : '✕'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -307,9 +418,67 @@ export default function CommunityPage() {
                 </div>
               </div>
             ))}
+            {hasMore && (
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="w-full text-sm font-medium text-gray-500 hover:text-gray-800 bg-white border border-gray-200 rounded-2xl transition disabled:opacity-50"
+                style={{ padding: '0.875rem' }}
+              >
+                {loadingMore ? 'Loading...' : 'Load more posts'}
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Report Modal */}
+      {reportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" style={{ padding: '2rem' }}>
+            {reportSent ? (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold text-gray-900">Report submitted</p>
+                <p className="text-xs text-gray-400 text-center">Our team will review it shortly.</p>
+                <button onClick={() => setReportModal(null)} className="mt-2 text-sm font-medium text-gray-500 hover:text-gray-900 transition">Close</button>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-base font-bold text-gray-900 mb-1">Report {reportModal.type === 'post' ? 'Post' : 'Comment'}</h3>
+                <p className="text-xs text-gray-400 mb-5">Let us know why this content is inappropriate. Our coaches will review it.</p>
+                <div className="mb-5">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Reason (optional)</label>
+                  <textarea
+                    value={reportReason}
+                    onChange={e => setReportReason(e.target.value)}
+                    placeholder="e.g. Offensive language, spam, harassment..."
+                    rows={3}
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300 resize-none"
+                    style={{ padding: '0.6rem 0.875rem' }}
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setReportModal(null)} disabled={reportSending}
+                    className="text-sm font-medium text-gray-500 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.6rem 1.25rem' }}>
+                    Cancel
+                  </button>
+                  <button onClick={submitReport} disabled={reportSending}
+                    className="text-sm font-medium text-white bg-orange-500 hover:bg-orange-600 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.6rem 1.25rem' }}>
+                    {reportSending ? 'Sending...' : 'Submit Report'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
