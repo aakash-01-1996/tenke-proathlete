@@ -29,6 +29,7 @@ type Member = {
   sessions_total: number | null
   sessions_left: number | null
   training_days: string[] | null
+  training_time: string | null
   created_at: string
   last_active_at?: string | null
 }
@@ -54,6 +55,7 @@ type MemberForm = {
   sessions_total: string
   sessions_left: string
   training_days: string[]
+  training_schedule: Record<string, string>  // day → "HH:MM"
 }
 
 function daysSince(dateStr: string | null | undefined): number | null {
@@ -76,7 +78,7 @@ const allDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 const emptyForm: MemberForm = {
   first_name: '', last_name: '', email: '', phone: '',
   age: '', weight: '', height: '', trainer_id: '',
-  package: '', sessions_total: '', sessions_left: '', training_days: [],
+  package: '', sessions_total: '', sessions_left: '', training_days: [], training_schedule: {},
 }
 
 async function getToken() {
@@ -166,18 +168,27 @@ export default function MembersPage() {
       sessions_total: m.sessions_total ? String(m.sessions_total) : '',
       sessions_left: m.sessions_left ? String(m.sessions_left) : '',
       training_days: m.training_days ?? [],
+      training_schedule: (() => {
+        try { return m.training_time ? JSON.parse(m.training_time) : {} } catch { return {} }
+      })(),
     })
     setModalError('')
     setShowModal(true)
   }
 
   const toggleDay = (day: string) => {
-    setForm(prev => ({
-      ...prev,
-      training_days: prev.training_days.includes(day)
-        ? prev.training_days.filter(d => d !== day)
-        : [...prev.training_days, day],
-    }))
+    setForm(prev => {
+      const removing = prev.training_days.includes(day)
+      const next_schedule = { ...prev.training_schedule }
+      if (removing) delete next_schedule[day]
+      return {
+        ...prev,
+        training_days: removing
+          ? prev.training_days.filter(d => d !== day)
+          : [...prev.training_days, day],
+        training_schedule: next_schedule,
+      }
+    })
   }
 
   async function handleSave() {
@@ -209,6 +220,9 @@ export default function MembersPage() {
         sessions_total: form.sessions_total ? Number(form.sessions_total) : null,
         sessions_left: form.sessions_left ? Number(form.sessions_left) : null,
         training_days: form.training_days.length ? form.training_days : null,
+        training_time: Object.keys(form.training_schedule).length
+          ? JSON.stringify(form.training_schedule)
+          : null,
       }
       const url = editTarget ? `${API}/members/${editTarget.id}` : `${API}/members`
       const method = editTarget ? 'PUT' : 'POST'
@@ -585,6 +599,36 @@ export default function MembersPage() {
                   ))}
                 </div>
               </div>
+
+              {form.training_days.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-2">Training Time <span className="text-gray-400 font-normal">(per day)</span></label>
+                  <div className="flex flex-col gap-2">
+                    {[...form.training_days]
+                      .sort((a, b) => allDays.indexOf(a) - allDays.indexOf(b))
+                      .map(day => (
+                        <div key={day} className="flex items-center gap-3">
+                          <span className="text-xs font-semibold text-gray-700 w-6 text-center">{day}</span>
+                          <input
+                            type="time"
+                            value={form.training_schedule[day] ?? ''}
+                            onChange={e => setForm(prev => ({
+                              ...prev,
+                              training_schedule: { ...prev.training_schedule, [day]: e.target.value },
+                            }))}
+                            className="flex-1 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.4rem 0.75rem' }}
+                          />
+                          {form.training_schedule[day] && (
+                            <span className="text-xs text-gray-400 w-16 text-right flex-shrink-0">
+                              {new Date(`1970-01-01T${form.training_schedule[day]}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3" style={{ marginTop: '1.75rem' }}>

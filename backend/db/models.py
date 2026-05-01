@@ -51,6 +51,7 @@ class Member(Base):
     sessions_total = Column(Integer, nullable=True)
     sessions_left = Column(Integer, nullable=True)
     training_days = Column(String, nullable=True)  # comma-separated e.g. "M,W,F"
+    training_time = Column(String, nullable=True)  # e.g. "7:00 AM"
     training_goal = Column(Text, nullable=True)    # HTML string from rich-text editor
     last_active_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -193,11 +194,23 @@ class Metric(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class WorkoutDay(Base):
+    __tablename__ = "workout_days"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
+    day_number = Column(Integer, nullable=False)   # 1, 2, 3 …
+    label = Column(String, nullable=False, default='Workout')  # editable e.g. "Upper Body"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class WorkoutExercise(Base):
     __tablename__ = "workout_exercises"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
-    category = Column(String, nullable=False)    # 'upper' | 'lower' | 'core'
+    day_id = Column(UUID(as_uuid=True), ForeignKey("workout_days.id", ondelete="CASCADE"), nullable=True)
+    category = Column(String, nullable=True)    # kept for legacy data
+    is_rest = Column(Boolean, nullable=False, default=False, server_default='false')
+    rest_seconds = Column(Integer, nullable=True)  # e.g. 60, 90, 120
     name = Column(String, nullable=False)
     sets = Column(Integer, nullable=True)
     reps = Column(Integer, nullable=True)

@@ -7,28 +7,29 @@ from datetime import datetime, date
 from pydantic import BaseModel
 
 from db.session import get_db
-from db.models import WorkoutExercise, Member, ExerciseWeightLog
-from api.dependencies import get_current_user
+from db.models import WorkoutDay, WorkoutExercise, Member, ExerciseWeightLog
+from api.dependencies import get_current_user, require_coach_or_trainer
 
 router = APIRouter()
-
-VALID_CATEGORIES = {'upper', 'lower', 'core'}
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
-class ExerciseIn(BaseModel):
-    category: str          # 'upper' | 'lower' | 'core'
-    name: str
-    sets: Optional[int] = None
-    reps: Optional[int] = None
-    duration: Optional[str] = None   # e.g. "20 min", "30 sec"
+class DayIn(BaseModel):
+    label: str = 'Workout'
+
+
+class DayLabelIn(BaseModel):
+    label: str
 
 
 class ExerciseOut(BaseModel):
     id: UUID
     member_id: UUID
-    category: str
+    day_id: Optional[UUID]
+    category: Optional[str]
+    is_rest: bool
+    rest_seconds: Optional[int]
     name: str
     sets: Optional[int]
     reps: Optional[int]
@@ -39,9 +40,30 @@ class ExerciseOut(BaseModel):
         from_attributes = True
 
 
+class DayOut(BaseModel):
+    id: UUID
+    member_id: UUID
+    day_number: int
+    label: str
+    exercises: List[ExerciseOut] = []
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ExerciseIn(BaseModel):
+    name: str
+    sets: Optional[int] = None
+    reps: Optional[int] = None
+    duration: Optional[str] = None
+    is_rest: bool = False
+    rest_seconds: Optional[int] = None
+
+
 class WeightLogIn(BaseModel):
-    weight: str            # e.g. "45 lbs", "20 kg"
-    logged_at: Optional[date] = None   # defaults to today if omitted
+    weight: str
+    logged_at: Optional[date] = None
 
 
 class WeightLogOut(BaseModel):
@@ -64,6 +86,16 @@ def _member_or_404(member_id: UUID, db: Session) -> Member:
     return member
 
 
+def _day_or_404(day_id: UUID, member_id: UUID, db: Session) -> WorkoutDay:
+    day = db.query(WorkoutDay).filter(
+        WorkoutDay.id == day_id,
+        WorkoutDay.member_id == member_id,
+    ).first()
+    if not day:
+        raise HTTPException(status_code=404, detail="Workout day not found.")
+    return day
+
+
 def _exercise_or_404(exercise_id: UUID, member_id: UUID, db: Session) -> WorkoutExercise:
     ex = db.query(WorkoutExercise).filter(
         WorkoutExercise.id == exercise_id,
@@ -74,47 +106,129 @@ def _exercise_or_404(exercise_id: UUID, member_id: UUID, db: Session) -> Workout
     return ex
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
-
-@router.get("/{member_id}", response_model=List[ExerciseOut])
-def list_exercises(
-    member_id: UUID,
-    db: Session = Depends(get_db),
-    user=Depends(get_current_user),
-):
-    """Get all workout exercises for a member. Coach, trainer, or the member themselves."""
-    _member_or_404(member_id, db)
-    return (
+def _build_day_out(day: WorkoutDay, db: Session) -> DayOut:
+    exercises = (
         db.query(WorkoutExercise)
-        .filter(WorkoutExercise.member_id == member_id)
+        .filter(WorkoutExercise.day_id == day.id)
         .order_by(WorkoutExercise.created_at.asc())
         .all()
     )
+    out = DayOut.model_validate(day)
+    out.exercises = [ExerciseOut.model_validate(e) for e in exercises]
+    return out
 
 
-@router.post("/{member_id}", response_model=ExerciseOut, status_code=status.HTTP_201_CREATED)
-def add_exercise(
+# ── Workout Day Routes ────────────────────────────────────────────────────────
+
+@router.get("/{member_id}/days", response_model=List[DayOut])
+def list_days(
     member_id: UUID,
-    payload: ExerciseIn,
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    """Add a workout exercise. Coach, trainer, or the member themselves."""
-    if payload.category not in VALID_CATEGORIES:
-        raise HTTPException(status_code=422, detail=f"Category must be one of: {', '.join(VALID_CATEGORIES)}.")
+    """List all workout days for a member, ordered by day_number."""
+    _member_or_404(member_id, db)
+    days = (
+        db.query(WorkoutDay)
+        .filter(WorkoutDay.member_id == member_id)
+        .order_by(WorkoutDay.day_number.asc())
+        .all()
+    )
+    return [_build_day_out(d, db) for d in days]
+
+
+@router.post("/{member_id}/days", response_model=DayOut, status_code=status.HTTP_201_CREATED)
+def add_day(
+    member_id: UUID,
+    payload: DayIn,
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """Add a new workout day. Coach/trainer only."""
+    _member_or_404(member_id, db)
+    label = payload.label.strip() or 'Workout'
+    try:
+        # Next day_number = max existing + 1
+        from sqlalchemy import func as sqlfunc
+        max_num = db.query(sqlfunc.max(WorkoutDay.day_number)).filter(
+            WorkoutDay.member_id == member_id
+        ).scalar() or 0
+        day = WorkoutDay(member_id=member_id, day_number=max_num + 1, label=label)
+        db.add(day)
+        db.commit()
+        db.refresh(day)
+        return _build_day_out(day, db)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to add workout day.")
+
+
+@router.patch("/{member_id}/days/{day_id}", response_model=DayOut)
+def rename_day(
+    member_id: UUID,
+    day_id: UUID,
+    payload: DayLabelIn,
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """Rename a workout day label. Coach/trainer only."""
+    day = _day_or_404(day_id, member_id, db)
+    label = payload.label.strip()
+    if not label:
+        raise HTTPException(status_code=422, detail="Label cannot be empty.")
+    try:
+        day.label = label
+        db.commit()
+        db.refresh(day)
+        return _build_day_out(day, db)
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to rename day.")
+
+
+@router.delete("/{member_id}/days/{day_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_day(
+    member_id: UUID,
+    day_id: UUID,
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """Delete a workout day and all its exercises. Coach/trainer only."""
+    day = _day_or_404(day_id, member_id, db)
+    try:
+        db.delete(day)  # CASCADE deletes exercises and their weight logs
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to delete workout day.")
+
+
+# ── Exercise Routes ───────────────────────────────────────────────────────────
+
+@router.post("/{member_id}/days/{day_id}/exercises", response_model=ExerciseOut, status_code=status.HTTP_201_CREATED)
+def add_exercise(
+    member_id: UUID,
+    day_id: UUID,
+    payload: ExerciseIn,
+    db: Session = Depends(get_db),
+    user=Depends(require_coach_or_trainer),
+):
+    """Add an exercise to a workout day."""
+    _day_or_404(day_id, member_id, db)
     if not payload.name.strip():
         raise HTTPException(status_code=422, detail="Exercise name is required.")
     if payload.reps is not None and payload.duration is not None:
         raise HTTPException(status_code=422, detail="Provide either reps or duration, not both.")
-    _member_or_404(member_id, db)
     try:
         ex = WorkoutExercise(
             member_id=member_id,
-            category=payload.category,
+            day_id=day_id,
             name=payload.name.strip(),
             sets=payload.sets,
             reps=payload.reps,
             duration=payload.duration.strip() if payload.duration else None,
+            is_rest=payload.is_rest,
+            rest_seconds=payload.rest_seconds,
         )
         db.add(ex)
         db.commit()
@@ -125,28 +239,29 @@ def add_exercise(
         raise HTTPException(status_code=500, detail="Failed to add exercise.")
 
 
-@router.put("/{member_id}/{exercise_id}", response_model=ExerciseOut)
+@router.put("/{member_id}/days/{day_id}/exercises/{exercise_id}", response_model=ExerciseOut)
 def update_exercise(
     member_id: UUID,
+    day_id: UUID,
     exercise_id: UUID,
     payload: ExerciseIn,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_coach_or_trainer),
 ):
-    """Edit a workout exercise. Coach, trainer, or the member themselves."""
-    if payload.category not in VALID_CATEGORIES:
-        raise HTTPException(status_code=422, detail=f"Category must be one of: {', '.join(VALID_CATEGORIES)}.")
+    """Edit an exercise."""
+    _day_or_404(day_id, member_id, db)
+    ex = _exercise_or_404(exercise_id, member_id, db)
     if not payload.name.strip():
         raise HTTPException(status_code=422, detail="Exercise name is required.")
     if payload.reps is not None and payload.duration is not None:
         raise HTTPException(status_code=422, detail="Provide either reps or duration, not both.")
-    ex = _exercise_or_404(exercise_id, member_id, db)
     try:
-        ex.category = payload.category
         ex.name = payload.name.strip()
         ex.sets = payload.sets
         ex.reps = payload.reps
         ex.duration = payload.duration.strip() if payload.duration else None
+        ex.is_rest = payload.is_rest
+        ex.rest_seconds = payload.rest_seconds
         db.commit()
         db.refresh(ex)
         return ex
@@ -155,14 +270,16 @@ def update_exercise(
         raise HTTPException(status_code=500, detail="Failed to update exercise.")
 
 
-@router.delete("/{member_id}/{exercise_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{member_id}/days/{day_id}/exercises/{exercise_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_exercise(
     member_id: UUID,
+    day_id: UUID,
     exercise_id: UUID,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(require_coach_or_trainer),
 ):
-    """Hard delete an exercise. Gone from DB immediately."""
+    """Delete an exercise."""
+    _day_or_404(day_id, member_id, db)
     ex = _exercise_or_404(exercise_id, member_id, db)
     try:
         db.delete(ex)

@@ -31,9 +31,18 @@ from main import app  # noqa: E402
 
 # ── File-based SQLite so all connections share the same schema ────────────────
 
+from sqlalchemy import event  # noqa: E402
+
 TEST_DB_PATH = "/tmp/proathelete_test.db"
 SQLITE_URL = f"sqlite:///{TEST_DB_PATH}"
 test_engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+
+
+@event.listens_for(test_engine, "connect")
+def _enable_sqlite_fk(dbapi_connection, _):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 # Redirect module-level references so app code uses SQLite

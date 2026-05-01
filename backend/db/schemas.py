@@ -117,6 +117,7 @@ class MemberCreate(BaseModel):
     sessions_total: Optional[int] = None
     sessions_left: Optional[int] = None
     training_days: Optional[List[str]] = None  # e.g. ["M", "W", "F"]
+    training_time: Optional[str] = None        # e.g. "7:00 AM"
 
 
 class MemberUpdate(BaseModel):
@@ -132,6 +133,7 @@ class MemberUpdate(BaseModel):
     sessions_total: Optional[int] = None
     sessions_left: Optional[int] = None
     training_days: Optional[List[str]] = None
+    training_time: Optional[str] = None
 
 
 class MemberOut(BaseModel):
@@ -149,6 +151,7 @@ class MemberOut(BaseModel):
     sessions_total: Optional[int]
     sessions_left: Optional[int]
     training_days: Optional[List[str]]
+    training_time: Optional[str] = None
     training_goal: Optional[str] = None
     created_at: datetime
     last_active_at: Optional[datetime] = None

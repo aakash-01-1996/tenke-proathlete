@@ -25,17 +25,29 @@ type Member = {
   sessions_total: number | null
   sessions_left: number | null
   training_days: string[] | null
+  training_time: string | null
   training_goal: string | null
 }
 
 type Exercise = {
   id: string
   member_id: string
-  category: 'upper' | 'lower' | 'core'
+  day_id: string | null
+  is_rest: boolean
+  rest_seconds: number | null
   name: string
   sets: number | null
   reps: number | null
   duration: string | null
+  created_at: string
+}
+
+type WorkoutDay = {
+  id: string
+  member_id: string
+  day_number: number
+  label: string
+  exercises: Exercise[]
   created_at: string
 }
 
@@ -194,6 +206,119 @@ function TrendArrow({ direction }: { direction: 'up' | 'down' | 'neutral' }) {
 
 const allDays = ['M', 'T', 'W', 'Th', 'F', 'Sa', 'Su']
 
+// Map our day abbreviations to JS getDay() values (0 = Sun)
+const dayToJS: Record<string, number> = { Su: 0, M: 1, T: 2, W: 3, Th: 4, F: 5, Sa: 6 }
+
+function TrainingCalendar({ trainingDays, trainingTime }: { trainingDays: string[]; trainingTime: string | null }) {
+  const schedule: Record<string, string> = (() => {
+    try { return trainingTime ? JSON.parse(trainingTime) : {} } catch { return {} }
+  })()
+  const [offset, setOffset] = useState(0) // months relative to today
+
+  const today = new Date()
+  const viewDate = new Date(today.getFullYear(), today.getMonth() + offset, 1)
+  const year = viewDate.getFullYear()
+  const month = viewDate.getMonth()
+
+  const monthLabel = viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  // Days of week that are training days (JS numbers)
+  const activeDays = new Set(trainingDays.map(d => dayToJS[d]).filter(d => d !== undefined))
+
+  // Build calendar grid — pad start so Mon is col 0 (European style: Mon–Sun)
+  const firstDow = viewDate.getDay() // 0=Sun
+  // Shift so week starts Monday: Mon=0 … Sun=6
+  const startPad = (firstDow + 6) % 7
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const cells: (number | null)[] = [
+    ...Array(startPad).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
+  // Pad end to complete last row
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const isToday = (day: number) =>
+    offset === 0 && day === today.getDate()
+
+  const isTraining = (day: number) => {
+    const dow = new Date(year, month, day).getDay()
+    return activeDays.has(dow)
+  }
+
+  const HEADERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+
+  return (
+    <div style={{ userSelect: 'none' }}>
+      {/* Month nav */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setOffset(o => o - 1)}
+          className="text-gray-400 hover:text-gray-800 transition rounded-lg"
+          style={{ padding: '0.2rem 0.4rem', fontSize: '1rem', lineHeight: 1 }}
+        >
+          ‹
+        </button>
+        <span className="text-xs font-semibold text-gray-700">{monthLabel}</span>
+        <button
+          onClick={() => setOffset(o => o + 1)}
+          className="text-gray-400 hover:text-gray-800 transition rounded-lg"
+          style={{ padding: '0.2rem 0.4rem', fontSize: '1rem', lineHeight: 1 }}
+        >
+          ›
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', marginBottom: '2px' }}>
+        {HEADERS.map((h, i) => (
+          <div key={i} className="text-center text-gray-400" style={{ fontSize: '0.6rem', fontWeight: 600, paddingBottom: '2px' }}>
+            {h}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px' }}>
+        {cells.map((day, i) => {
+          if (day === null) return <div key={i} />
+          const training = isTraining(day)
+          const todayCell = isToday(day)
+          // Find which abbreviation(s) map to this date's weekday
+          const dow = new Date(year, month, day).getDay()
+          const dayAbbr = Object.keys(dayToJS).find(k => dayToJS[k] === dow)
+          const rawTime = dayAbbr ? schedule[dayAbbr] : undefined
+          const timeLabel = rawTime
+            ? new Date(`1970-01-01T${rawTime}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+            : null
+          return (
+            <div
+              key={i}
+              className={`relative flex items-center justify-center rounded-full transition-all group ${
+                training
+                  ? todayCell
+                    ? 'bg-gray-200 text-gray-900 font-bold ring-2 ring-gray-400'
+                    : 'bg-gray-200 text-gray-700 font-medium'
+                  : todayCell
+                    ? 'ring-2 ring-gray-300 text-gray-500 font-semibold'
+                    : 'text-gray-400'
+              }`}
+              style={{ aspectRatio: '1', fontSize: '0.65rem' }}
+            >
+              {day}
+              {training && (
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-900 text-white rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10"
+                  style={{ fontSize: '0.6rem' }}>
+                  {timeLabel ?? '—'}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function AthletePage() {
@@ -234,15 +359,24 @@ export default function AthletePage() {
   const [goalSaving, setGoalSaving] = useState(false)
 
   // Workout
-  const [exercises, setExercises] = useState<Exercise[]>([])
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([])
+  const [activeDayIdx, setActiveDayIdx] = useState(0)
+  const [dayLabelEditing, setDayLabelEditing] = useState(false)
+  const [dayLabelInput, setDayLabelInput] = useState('')
+  const [dayLabelSaving, setDayLabelSaving] = useState(false)
   const [exerciseModal, setExerciseModal] = useState<{
     open: boolean
-    category: 'upper' | 'lower' | 'core'
+    dayId: string
     editing: Exercise | null
-  }>({ open: false, category: 'upper', editing: null })
+  }>({ open: false, dayId: '', editing: null })
   const [exForm, setExForm] = useState<ExerciseForm>({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
   const [exSaving, setExSaving] = useState(false)
   const [exDeleting, setExDeleting] = useState(false)
+  const [exError, setExError] = useState('')
+
+  // REST quick-add
+  const [restPickerDayId, setRestPickerDayId] = useState<string | null>(null)
+  const [restPickerSaving, setRestPickerSaving] = useState(false)
 
   // Weight logs
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([])
@@ -313,14 +447,19 @@ export default function AthletePage() {
       const [profileRes, metricsRes, workoutRes] = await Promise.all([
         fetch(isMe ? `${API}/members/me` : `${API}/members/${memberId}`, { headers }),
         fetch(`${API}/metrics/member/${memberId}`, { headers }),
-        fetch(`${API}/workout/${memberId}`, { headers }),
+        fetch(`${API}/workout/${memberId}/days`, { headers }),
       ])
 
       if (!profileRes.ok) throw new Error()
       const profile = await profileRes.json()
       setMemberProfile(profile)
       setMetricEntries(metricsRes.ok ? await metricsRes.json() : [])
-      setExercises(workoutRes.ok ? await workoutRes.json() : [])
+      const days: WorkoutDay[] = workoutRes.ok ? await workoutRes.json() : []
+      setWorkoutDays(days)
+      // Week reset: default to day 0 on Mondays, else restore last index
+      const storedIdx = parseInt(localStorage.getItem(`workoutDay_${memberId}`) ?? '0', 10)
+      const isMonday = new Date().getDay() === 1
+      setActiveDayIdx(isMonday ? 0 : Math.min(storedIdx, Math.max(0, days.length - 1)))
       // Sync goal into contenteditable
       if (goalRef.current) {
         goalRef.current.innerHTML = profile.training_goal ?? ''
@@ -428,14 +567,21 @@ export default function AthletePage() {
 
   // ── Workout ─────────────────────────────────────────────────────────────
 
-  function openAddExercise(category: 'upper' | 'lower' | 'core') {
+  function goToDay(idx: number, memberId: string) {
+    setActiveDayIdx(idx)
+    localStorage.setItem(`workoutDay_${memberId}`, String(idx))
+  }
+
+  function openAddExercise(dayId: string) {
     setExForm({ name: '', sets: '', mode: 'reps', reps: '', duration: '' })
     setWeightLogs([])
     setWeightInput('')
-    setExerciseModal({ open: true, category, editing: null })
+    setExError('')
+    setExerciseModal({ open: true, dayId, editing: null })
   }
 
   async function openEditExercise(ex: Exercise) {
+    setExError('')
     setExForm({
       name: ex.name,
       sets: ex.sets != null ? String(ex.sets) : '',
@@ -444,18 +590,42 @@ export default function AthletePage() {
       duration: ex.duration ?? '',
     })
     setWeightInput('')
-    setExerciseModal({ open: true, category: ex.category, editing: ex })
-    // Fetch weight history
-    try {
-      const token = await getToken()
-      const res = await fetch(`${API}/workout/${ex.member_id}/${ex.id}/logs`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      setWeightLogs(res.ok ? await res.json() : [])
-    } catch {
-      setWeightLogs([])
+    setExerciseModal({ open: true, dayId: ex.day_id ?? '', editing: ex })
+    if (!ex.is_rest) {
+      try {
+        const token = await getToken()
+        const res = await fetch(`${API}/workout/${ex.member_id}/${ex.id}/logs`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const logs = res.ok ? await res.json() : []
+        setWeightLogs(logs.slice(0, 3))
+      } catch {
+        setWeightLogs([])
+      }
     }
   }
+
+  async function saveDay(label: string) {
+    if (!m) return
+    setDayLabelSaving(true)
+    try {
+      const token = await getToken()
+      const day = workoutDays[activeDayIdx]
+      const res = await fetch(`${API}/workout/${m.id}/days/${day.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ label }),
+      })
+      if (res.ok) {
+        const updated: WorkoutDay = await res.json()
+        setWorkoutDays(prev => prev.map(d => d.id === updated.id ? updated : d))
+      }
+    } finally {
+      setDayLabelSaving(false)
+      setDayLabelEditing(false)
+    }
+  }
+
 
   async function logWeight() {
     if (!m || !exerciseModal.editing || !weightInput.trim()) return
@@ -469,7 +639,7 @@ export default function AthletePage() {
       })
       if (res.ok) {
         const newLog: WeightLog = await res.json()
-        setWeightLogs(prev => [newLog, ...prev])
+        setWeightLogs(prev => [newLog, ...prev].slice(0, 3))
         setWeightInput('')
       }
     } finally {
@@ -495,32 +665,43 @@ export default function AthletePage() {
   async function saveExercise() {
     if (!m || !exForm.name.trim()) return
     setExSaving(true)
+    setExError('')
+    const dayId = exerciseModal.dayId
+    const editing = exerciseModal.editing
     try {
       const token = await getToken()
       const body = {
-        category: exerciseModal.category,
         name: exForm.name.trim(),
         sets: exForm.sets ? parseInt(exForm.sets) : null,
         reps: exForm.mode === 'reps' && exForm.reps ? parseInt(exForm.reps) : null,
         duration: exForm.mode === 'duration' && exForm.duration ? exForm.duration.trim() : null,
+        is_rest: false,
       }
-      const url = exerciseModal.editing
-        ? `${API}/workout/${m.id}/${exerciseModal.editing.id}`
-        : `${API}/workout/${m.id}`
-      const method = exerciseModal.editing ? 'PUT' : 'POST'
+      const url = editing
+        ? `${API}/workout/${m.id}/days/${dayId}/exercises/${editing.id}`
+        : `${API}/workout/${m.id}/days/${dayId}/exercises`
+      const method = editing ? 'PUT' : 'POST'
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
       })
-      if (!res.ok) return
-      const saved: Exercise = await res.json()
-      if (exerciseModal.editing) {
-        setExercises(prev => prev.map(e => e.id === saved.id ? saved : e))
-      } else {
-        setExercises(prev => [...prev, saved])
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setExError(data?.detail || `Error ${res.status}`)
+        return
       }
-      setExerciseModal({ open: false, category: 'upper', editing: null })
+      // Re-fetch the full day to ensure exercises are in sync
+      const dayRes = await fetch(`${API}/workout/${m.id}/days`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (dayRes.ok) {
+        const days: WorkoutDay[] = await dayRes.json()
+        setWorkoutDays(days)
+      }
+      setExerciseModal({ open: false, dayId: '', editing: null })
+    } catch {
+      setExError('Network error. Please try again.')
     } finally {
       setExSaving(false)
     }
@@ -531,12 +712,14 @@ export default function AthletePage() {
     setExDeleting(true)
     try {
       const token = await getToken()
-      await fetch(`${API}/workout/${m.id}/${ex.id}`, {
+      await fetch(`${API}/workout/${m.id}/days/${ex.day_id}/exercises/${ex.id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      setExercises(prev => prev.filter(e => e.id !== ex.id))
-      setExerciseModal({ open: false, category: 'upper', editing: null })
+      setWorkoutDays(prev => prev.map(d =>
+        d.id === ex.day_id ? { ...d, exercises: d.exercises.filter(e => e.id !== ex.id) } : d
+      ))
+      setExerciseModal({ open: false, dayId: '', editing: null })
     } finally {
       setExDeleting(false)
     }
@@ -757,14 +940,7 @@ export default function AthletePage() {
               {m.training_days && m.training_days.length > 0 && (
                 <div>
                   <p className="text-xs text-gray-400 uppercase tracking-wide mb-2">Training Days</p>
-                  <div className="flex items-center gap-1.5">
-                    {[...m.training_days].sort((a, b) => allDays.indexOf(a) - allDays.indexOf(b)).map(day => (
-                      <span key={day} className="text-xs font-normal rounded-full bg-gray-900 text-white flex items-center justify-center"
-                        style={{ width: day === 'Th' ? '2rem' : '1.75rem', height: '1.75rem' }}>
-                        {day}
-                      </span>
-                    ))}
-                  </div>
+                  <TrainingCalendar trainingDays={m.training_days} trainingTime={m.training_time ?? null} />
                   {/* Only members can request a change */}
                   {!isCoach && (
                     <div className="flex flex-col gap-2 mt-3">
@@ -930,48 +1106,143 @@ export default function AthletePage() {
             </div>
 
             {/* ── Workout ── */}
-            {m && (
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Workout</p>
-                {(['upper', 'lower', 'core'] as const).map(cat => {
-                  const catExercises = exercises.filter(e => e.category === cat)
-                  const label = cat === 'upper' ? 'Upper Body' : cat === 'lower' ? 'Lower Body' : 'Core'
-                  return (
-                    <div key={cat} className="mb-6">
-                      <p className="text-xs font-semibold text-gray-500 mb-3">{label}</p>
-                      <div className="flex flex-wrap gap-3">
-                        {catExercises.map(ex => {
-                          // Find latest weight for this exercise from all logs — not loaded here,
-                          // so we store them per exercise after opening. For tile display we
-                          // keep a lightweight map updated on log actions.
-                          return (
+            {m && (() => {
+              const day = workoutDays[activeDayIdx]
+              return (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Workout</p>
+
+                  {workoutDays.length === 0 ? (
+                    <p className="text-sm text-gray-400" style={{ padding: '1rem 0' }}>No workout days set up yet.</p>
+                  ) : (
+                    <>
+                      {/* ── Carousel header ── */}
+                      {(() => {
+                        const dayNameMap: Record<string, string> = { M: 'Monday', T: 'Tuesday', W: 'Wednesday', Th: 'Thursday', F: 'Friday', Sa: 'Saturday', Su: 'Sunday' }
+                        const sortedTrainingDays = [...(m.training_days ?? [])].sort((a, b) => allDays.indexOf(a) - allDays.indexOf(b))
+                        const trainingDayName = sortedTrainingDays[activeDayIdx] ? dayNameMap[sortedTrainingDays[activeDayIdx]] : null
+                        return (
+                          <div className="mb-5">
+                            <div className="flex items-center justify-between gap-3">
+                              {/* Prev arrow */}
+                              <button
+                                onClick={() => goToDay(activeDayIdx - 1, m.id)}
+                                disabled={activeDayIdx === 0}
+                                className="text-gray-400 hover:text-gray-800 disabled:opacity-20 transition flex-shrink-0"
+                                style={{ padding: '0.25rem' }}
+                              >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="15 18 9 12 15 6" />
+                                </svg>
+                              </button>
+
+                              {/* Centre block */}
+                              <div className="flex-1 text-center">
+                                {trainingDayName && (
+                                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-0.5">{trainingDayName}</p>
+                                )}
+                                <div className="flex items-center justify-center gap-2">
+                                  <span className="text-base font-bold text-gray-500 uppercase tracking-wide">Day {day.day_number}</span>
+                                  <span className="text-gray-300 font-light text-lg">·</span>
+                                  {dayLabelEditing ? (
+                                    <input
+                                      autoFocus
+                                      value={dayLabelInput}
+                                      onChange={e => setDayLabelInput(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') saveDay(dayLabelInput)
+                                        if (e.key === 'Escape') setDayLabelEditing(false)
+                                      }}
+                                      className="text-base font-bold text-gray-900 bg-gray-100 rounded-lg outline-none focus:ring-2 focus:ring-gray-300 text-center"
+                                      style={{ padding: '0.15rem 0.5rem', width: '9rem' }}
+                                    />
+                                  ) : (
+                                    <span
+                                      className={`text-base font-bold text-gray-900 uppercase tracking-wide ${isCoach ? 'cursor-pointer hover:text-gray-500 transition' : ''}`}
+                                      onClick={() => {
+                                        if (!isCoach) return
+                                        setDayLabelInput(day.label)
+                                        setDayLabelEditing(true)
+                                      }}
+                                    >
+                                      {day.label}
+                                    </span>
+                                  )}
+                                  {dayLabelEditing && (
+                                    <button
+                                      onClick={() => saveDay(dayLabelInput)}
+                                      disabled={dayLabelSaving}
+                                      className="text-xs font-medium text-white bg-gray-900 rounded-lg transition disabled:opacity-50"
+                                      style={{ padding: '0.2rem 0.6rem' }}
+                                    >
+                                      {dayLabelSaving ? '...' : 'Save'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Next arrow */}
+                              <button
+                                onClick={() => goToDay(activeDayIdx + 1, m.id)}
+                                disabled={activeDayIdx === workoutDays.length - 1}
+                                className="text-gray-400 hover:text-gray-800 disabled:opacity-20 transition flex-shrink-0"
+                                style={{ padding: '0.25rem' }}
+                              >
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })()}
+
+                      {/* Dot indicators */}
+                      {workoutDays.length > 1 && (
+                        <div className="flex items-center gap-1.5 mb-4">
+                          {workoutDays.map((_, i) => (
                             <button
-                              key={ex.id}
-                              onClick={() => openEditExercise(ex)}
-                              className="bg-white border border-gray-200 rounded-2xl text-left hover:border-gray-400 hover:shadow-sm transition"
-                              style={{ padding: '0.875rem 1.1rem', minWidth: '120px' }}
-                            >
-                              <p className="text-sm font-semibold text-gray-900 mb-0.5">{ex.name}</p>
-                              <p className="text-xs text-gray-400">
-                                {ex.sets != null ? `${ex.sets} × ` : ''}
-                                {ex.reps != null ? `${ex.reps} reps` : ex.duration ?? '—'}
-                              </p>
-                            </button>
-                          )
-                        })}
-                        {/* Add button */}
-                        <button
-                          onClick={() => openAddExercise(cat)}
-                          className="w-14 h-14 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 hover:border-gray-400 hover:text-gray-500 transition text-2xl font-light flex-shrink-0"
-                        >
-                          +
-                        </button>
+                              key={i}
+                              onClick={() => goToDay(i, m.id)}
+                              className={`rounded-full transition-all ${i === activeDayIdx ? 'bg-gray-900 w-4 h-1.5' : 'bg-gray-200 w-1.5 h-1.5'}`}
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* ── Exercise tiles ── */}
+                      <div className="flex flex-wrap gap-3">
+                        {day.exercises.map(ex => (
+                          <button
+                            key={ex.id}
+                            onClick={() => isCoach ? openEditExercise(ex) : undefined}
+                            className={`bg-white border border-gray-200 rounded-2xl text-left transition flex-shrink-0 ${isCoach ? 'hover:border-gray-400 hover:shadow-sm cursor-pointer' : 'cursor-default'}`}
+                            style={{ padding: '0.875rem 1.1rem', minWidth: '120px' }}
+                          >
+                            <p className="text-sm font-semibold text-gray-900 mb-0.5">{ex.name}</p>
+                            <p className="text-xs text-gray-400">
+                              {ex.sets != null ? `${ex.sets} × ` : ''}
+                              {ex.reps != null ? `${ex.reps} reps` : ex.duration ?? '—'}
+                            </p>
+                          </button>
+                        ))}
+
+                        {/* Add button — coach only */}
+                        {isCoach && (
+                          <button
+                            onClick={() => openAddExercise(day.id)}
+                            className="w-14 h-14 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 hover:border-gray-400 hover:text-gray-500 transition text-2xl font-light flex-shrink-0"
+                          >
+                            +
+                          </button>
+                        )}
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+
+                    </>
+                  )}
+                </div>
+              )
+            })()}
           </>
         )}
       </div>
@@ -981,8 +1252,9 @@ export default function AthletePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm" style={{ padding: '2rem' }}>
             <h3 className="text-base font-bold text-gray-900 mb-5">
-              {exerciseModal.editing ? 'Edit Exercise' : `Add Exercise · ${exerciseModal.category === 'upper' ? 'Upper Body' : exerciseModal.category === 'lower' ? 'Lower Body' : 'Core'}`}
+              {exerciseModal.editing ? 'Edit Exercise' : 'Add Exercise'}
             </h3>
+
             <div className="flex flex-col gap-4">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Exercise Name</label>
@@ -1004,7 +1276,6 @@ export default function AthletePage() {
                   style={{ padding: '0.6rem 0.875rem' }}
                 />
               </div>
-              {/* Reps / Duration toggle */}
               <div>
                 <div className="flex gap-2 mb-2">
                   {(['reps', 'duration'] as const).map(mode => (
@@ -1036,11 +1307,12 @@ export default function AthletePage() {
                 )}
               </div>
             </div>
+
             {/* ── Weight Log Section — only when editing ── */}
             {exerciseModal.editing && (
               <div style={{ marginTop: '1.5rem' }}>
                 <div className="w-full h-px bg-gray-100 mb-4" />
-                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Weight History</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Last 3 Weights</p>
 
                 {/* Log new weight */}
                 <div className="flex gap-2 mb-3">
@@ -1089,8 +1361,11 @@ export default function AthletePage() {
               </div>
             )}
 
+            {exError && (
+              <p className="text-xs text-red-500 mt-4">{exError}</p>
+            )}
+
             <div className="flex items-center justify-between" style={{ marginTop: '1.75rem' }}>
-              {/* Delete — only when editing */}
               {exerciseModal.editing ? (
                 <button
                   onClick={() => exerciseModal.editing && deleteExercise(exerciseModal.editing)}
@@ -1103,7 +1378,7 @@ export default function AthletePage() {
               ) : <div />}
               <div className="flex gap-3">
                 <button
-                  onClick={() => setExerciseModal({ open: false, category: 'upper', editing: null })}
+                  onClick={() => setExerciseModal({ open: false, dayId: '', editing: null })}
                   disabled={exSaving}
                   className="text-sm font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
                   style={{ padding: '0.6rem 1.25rem' }}
