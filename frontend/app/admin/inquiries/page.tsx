@@ -168,7 +168,7 @@ export default function InquiriesPage() {
         <input
           value={search}
           onChange={e => { setSearch(e.target.value); setSelected(null) }}
-          placeholder="Search by name, child, or email..."
+          placeholder="Search by name, athlete, or email..."
           className="bg-white border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
           style={{ padding: '0.6rem 1rem', width: '280px' }}
         />
