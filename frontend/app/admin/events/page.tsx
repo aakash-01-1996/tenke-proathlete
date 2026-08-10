@@ -107,6 +107,20 @@ export default function EventsPage() {
   const [uploadingCover, setUploadingCover] = useState(false)
   const coverInputRef = useRef<HTMLInputElement>(null)
 
+  const sanitizeImagePreviewUrl = (value: string | null | undefined): string | null => {
+    if (!value) return null
+    if (value.startsWith('blob:')) return value
+
+    try {
+      const parsed = new URL(value)
+      if (parsed.protocol === 'https:') return parsed.toString()
+    } catch {
+      return null
+    }
+
+    return null
+  }
+
   const API = process.env.NEXT_PUBLIC_API_URL
 
   useEffect(() => {
@@ -134,7 +148,7 @@ export default function EventsPage() {
     setModalError('')
 
     // Show local preview immediately
-    setCoverPreview(URL.createObjectURL(file))
+    setCoverPreview(sanitizeImagePreviewUrl(URL.createObjectURL(file)))
 
     try {
       const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME
@@ -152,7 +166,7 @@ export default function EventsPage() {
       const data = await res.json()
 
       setForm(prev => ({ ...prev, coverImageUrl: data.secure_url }))
-      setCoverPreview(data.secure_url)
+      setCoverPreview(sanitizeImagePreviewUrl(data.secure_url))
     } catch {
       setModalError('Failed to upload image. Please try again.')
       setCoverPreview(null)
