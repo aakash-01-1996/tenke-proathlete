@@ -6,7 +6,7 @@ A full-stack athlete management platform for tracking performance, managing trai
 
 **Frontend:** Next.js 15 (App Router), TypeScript, Tailwind CSS
 
-**Backend:** FastAPI, SQLAlchemy, Alembic, PostgreSQL
+**Backend:** Claude API, FastAPI, SQLAlchemy, Alembic, PostgreSQL
 
 **Auth:** Firebase Authentication
 
