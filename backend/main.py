@@ -4,6 +4,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from core.config import settings
 from api.routes import auth, members, trainers, coaches, community, nutrition, metrics, inquiries, gameplan
 from api.routes import day_change_requests, events, bookings, contact_messages, workout
+from api.routes import athlete_profile, ai_plans
 from api.dependencies import require_coach_or_trainer, get_current_user
 from db.session import get_db
 from db.models import Trainer, User, UserRole
@@ -36,6 +37,8 @@ app.include_router(events.router, prefix="/events", tags=["events"])
 app.include_router(bookings.router, prefix="/bookings", tags=["bookings"])
 app.include_router(contact_messages.router, prefix="/contact-messages", tags=["contact-messages"])
 app.include_router(workout.router, prefix="/workout", tags=["workout"])
+app.include_router(athlete_profile.router, prefix="/athlete-profile", tags=["athlete-profile"])
+app.include_router(ai_plans.router, prefix="/ai-plans", tags=["ai-plans"])
 
 
 @app.get("/staff")

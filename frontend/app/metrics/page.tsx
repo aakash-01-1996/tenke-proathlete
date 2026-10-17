@@ -78,6 +78,23 @@ type MetricEntry = {
   overall_progress: number | null
 }
 
+type AthleteProfile = {
+  primary_goal: string | null
+  secondary_goals: string[] | null
+  workout_style: string | null
+  experience_level: string | null
+  target_weight: string | null
+  sessions_per_week_pref: number | null
+  equipment_access: string[] | null
+  injury_notes: string | null
+  dietary_preferences: string[] | null
+  allergies: string | null
+  daily_calorie_target: number | null
+  notes: string | null
+}
+
+type AIPlanRequestStatus = 'pending' | 'approved' | 'denied' | 'failed'
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async function getToken() {
@@ -384,6 +401,20 @@ export default function AthletePage() {
   const [weightSaving, setWeightSaving] = useState(false)
   const [weightDeleting, setWeightDeleting] = useState<string | null>(null)
 
+  // Athlete Profile (AI intake) + AI plan generation
+  const [athleteProfile, setAthleteProfile] = useState<AthleteProfile>({
+    primary_goal: null, secondary_goals: [], workout_style: null, experience_level: null,
+    target_weight: null, sessions_per_week_pref: null, equipment_access: [], injury_notes: null,
+    dietary_preferences: [], allergies: null, daily_calorie_target: null, notes: null,
+  })
+  const [profileEditing, setProfileEditing] = useState(false)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [workoutReqStatus, setWorkoutReqStatus] = useState<AIPlanRequestStatus | null>(null)
+  const [nutritionReqStatus, setNutritionReqStatus] = useState<AIPlanRequestStatus | null>(null)
+  const [generatingWorkout, setGeneratingWorkout] = useState(false)
+  const [generatingNutrition, setGeneratingNutrition] = useState(false)
+  const [aiPlanError, setAiPlanError] = useState('')
+
   const API = process.env.NEXT_PUBLIC_API_URL
 
   // ── Boot: get current user role ──────────────────────────────────────────
@@ -444,10 +475,11 @@ export default function AthletePage() {
       const headers = { Authorization: `Bearer ${tok}` }
       const isMe = (roleOverride ?? me?.role) === 'member'
 
-      const [profileRes, metricsRes, workoutRes] = await Promise.all([
+      const [profileRes, metricsRes, workoutRes, athleteProfileRes] = await Promise.all([
         fetch(isMe ? `${API}/members/me` : `${API}/members/${memberId}`, { headers }),
         fetch(`${API}/metrics/member/${memberId}`, { headers }),
         fetch(`${API}/workout/${memberId}/days`, { headers }),
+        fetch(`${API}/athlete-profile/${memberId}`, { headers }),
       ])
 
       if (!profileRes.ok) throw new Error()
@@ -456,6 +488,18 @@ export default function AthletePage() {
       setMetricEntries(metricsRes.ok ? await metricsRes.json() : [])
       const days: WorkoutDay[] = workoutRes.ok ? await workoutRes.json() : []
       setWorkoutDays(days)
+      if (athleteProfileRes.ok) {
+        setAthleteProfile(await athleteProfileRes.json())
+      } else {
+        setAthleteProfile({
+          primary_goal: null, secondary_goals: [], workout_style: null, experience_level: null,
+          target_weight: null, sessions_per_week_pref: null, equipment_access: [], injury_notes: null,
+          dietary_preferences: [], allergies: null, daily_calorie_target: null, notes: null,
+        })
+      }
+      setWorkoutReqStatus(null)
+      setNutritionReqStatus(null)
+      setAiPlanError('')
       // Week reset: default to day 0 on Mondays, else restore last index
       const storedIdx = parseInt(localStorage.getItem(`workoutDay_${memberId}`) ?? '0', 10)
       const isMonday = new Date().getDay() === 1
@@ -563,6 +607,53 @@ export default function AthletePage() {
   function applyFormat(cmd: string) {
     document.execCommand(cmd, false)
     goalRef.current?.focus()
+  }
+
+  // ── Athlete Profile (AI intake) ───────────────────────────────────────────
+
+  async function saveAthleteProfile() {
+    if (!m) return
+    setProfileSaving(true)
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/athlete-profile/${m.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(athleteProfile),
+      })
+      if (res.ok) {
+        setAthleteProfile(await res.json())
+        setProfileEditing(false)
+      }
+    } finally {
+      setProfileSaving(false)
+    }
+  }
+
+  async function generateAIPlan(kind: 'workout' | 'nutrition') {
+    if (!m) return
+    const setGenerating = kind === 'workout' ? setGeneratingWorkout : setGeneratingNutrition
+    const setReqStatus = kind === 'workout' ? setWorkoutReqStatus : setNutritionReqStatus
+    setGenerating(true)
+    setAiPlanError('')
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/ai-plans/${m.id}/generate-${kind}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setAiPlanError(data?.detail || `Failed to generate ${kind} plan.`)
+        return
+      }
+      const data = await res.json()
+      setReqStatus(data.status)
+    } catch {
+      setAiPlanError('Unable to reach the server. Please try again.')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   // ── Workout ─────────────────────────────────────────────────────────────
@@ -1243,6 +1334,212 @@ export default function AthletePage() {
                 </div>
               )
             })()}
+
+            {/* ── Athlete Profile / AI Plans ── */}
+            {m && (
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-bold uppercase tracking-widest text-gray-400">Athlete Profile & AI Plans</p>
+                  {!profileEditing && (
+                    <button
+                      onClick={() => setProfileEditing(true)}
+                      className="text-xs font-medium text-gray-400 hover:text-gray-700 underline underline-offset-2 transition"
+                    >
+                      Edit intake info
+                    </button>
+                  )}
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-2xl" style={{ padding: '1.25rem' }}>
+                  {profileEditing ? (
+                    <div className="flex flex-col gap-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Primary Goal</label>
+                          <select
+                            value={athleteProfile.primary_goal ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, primary_goal: e.target.value || null }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          >
+                            <option value="">Select...</option>
+                            <option value="speed">Speed</option>
+                            <option value="strength">Strength</option>
+                            <option value="vertical">Vertical</option>
+                            <option value="weight_loss">Weight Loss</option>
+                            <option value="overall">Overall Performance</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Workout Style</label>
+                          <select
+                            value={athleteProfile.workout_style ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, workout_style: e.target.value || null }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          >
+                            <option value="">Select...</option>
+                            <option value="strength">Strength</option>
+                            <option value="agility">Agility</option>
+                            <option value="hybrid">Hybrid</option>
+                            <option value="conditioning">Conditioning</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Experience Level</label>
+                          <select
+                            value={athleteProfile.experience_level ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, experience_level: e.target.value || null }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          >
+                            <option value="">Select...</option>
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                            <option value="pro">Pro</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Target Weight</label>
+                          <input
+                            value={athleteProfile.target_weight ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, target_weight: e.target.value || null }))}
+                            placeholder="e.g. 165 lbs"
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Sessions / Week (pref.)</label>
+                          <input
+                            type="number" min="1" max="7"
+                            value={athleteProfile.sessions_per_week_pref ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, sessions_per_week_pref: e.target.value ? parseInt(e.target.value) : null }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-500 mb-1">Daily Calorie Target</label>
+                          <input
+                            type="number" min="0"
+                            value={athleteProfile.daily_calorie_target ?? ''}
+                            onChange={e => setAthleteProfile(p => ({ ...p, daily_calorie_target: e.target.value ? parseInt(e.target.value) : null }))}
+                            className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                            style={{ padding: '0.5rem 0.75rem' }}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Dietary Preferences (comma separated)</label>
+                        <input
+                          value={(athleteProfile.dietary_preferences ?? []).join(', ')}
+                          onChange={e => setAthleteProfile(p => ({ ...p, dietary_preferences: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                          placeholder="e.g. vegetarian, gluten_free"
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                          style={{ padding: '0.5rem 0.75rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Allergies</label>
+                        <input
+                          value={athleteProfile.allergies ?? ''}
+                          onChange={e => setAthleteProfile(p => ({ ...p, allergies: e.target.value || null }))}
+                          placeholder="e.g. peanuts, shellfish"
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300"
+                          style={{ padding: '0.5rem 0.75rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Injury Notes</label>
+                        <textarea
+                          value={athleteProfile.injury_notes ?? ''}
+                          onChange={e => setAthleteProfile(p => ({ ...p, injury_notes: e.target.value || null }))}
+                          rows={2}
+                          className="w-full bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 outline-none focus:ring-2 focus:ring-gray-300 resize-none"
+                          style={{ padding: '0.5rem 0.75rem' }}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-3">
+                        <button
+                          onClick={() => setProfileEditing(false)}
+                          disabled={profileSaving}
+                          className="text-xs font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-lg transition disabled:opacity-50"
+                          style={{ padding: '0.4rem 0.875rem' }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveAthleteProfile}
+                          disabled={profileSaving}
+                          className="text-xs font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-lg transition disabled:opacity-50"
+                          style={{ padding: '0.4rem 0.875rem' }}
+                        >
+                          {profileSaving ? 'Saving...' : 'Save'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-x-6 gap-y-2 mb-4">
+                      <div><p className="text-xs text-gray-400 mb-0.5">Primary Goal</p><p className="text-sm font-medium text-gray-800">{athleteProfile.primary_goal || '—'}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Workout Style</p><p className="text-sm font-medium text-gray-800">{athleteProfile.workout_style || '—'}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Experience</p><p className="text-sm font-medium text-gray-800">{athleteProfile.experience_level || '—'}</p></div>
+                      <div><p className="text-xs text-gray-400 mb-0.5">Target Weight</p><p className="text-sm font-medium text-gray-800">{athleteProfile.target_weight || '—'}</p></div>
+                    </div>
+                  )}
+
+                  <div className="w-full h-px bg-gray-100 my-4" />
+
+                  <p className="text-xs text-gray-400 mb-3">
+                    AI-suggested — your coach reviews and approves before anything takes effect.
+                  </p>
+
+                  {aiPlanError && (
+                    <div className="mb-3 bg-red-50 border border-red-100 text-red-700 text-xs rounded-xl" style={{ padding: '0.5rem 0.75rem' }}>
+                      {aiPlanError}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => generateAIPlan('workout')}
+                      disabled={generatingWorkout || workoutReqStatus === 'pending'}
+                      className="text-xs font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-xl transition disabled:opacity-50"
+                      style={{ padding: '0.5rem 1rem' }}
+                    >
+                      {generatingWorkout
+                        ? 'Generating...'
+                        : workoutReqStatus === 'pending'
+                          ? 'Workout plan pending review'
+                          : workoutReqStatus === 'failed'
+                            ? 'Generation failed — try again'
+                            : 'Generate AI Workout Plan'}
+                    </button>
+                    <button
+                      onClick={() => generateAIPlan('nutrition')}
+                      disabled={generatingNutrition || nutritionReqStatus === 'pending'}
+                      className="text-xs font-medium text-white bg-gray-900 hover:bg-gray-700 rounded-xl transition disabled:opacity-50"
+                      style={{ padding: '0.5rem 1rem' }}
+                    >
+                      {generatingNutrition
+                        ? 'Generating...'
+                        : nutritionReqStatus === 'pending'
+                          ? 'Nutrition plan pending review'
+                          : nutritionReqStatus === 'failed'
+                            ? 'Generation failed — try again'
+                            : 'Generate AI Nutrition Plan'}
+                    </button>
+                  </div>
+
+                  {(workoutReqStatus === 'pending' || nutritionReqStatus === 'pending') && (
+                    <p className="text-xs text-gray-400 mt-3">
+                      Your AI-suggested plan has been sent to your coach for review. You'll see it here once approved.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

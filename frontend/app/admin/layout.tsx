@@ -10,6 +10,7 @@ const navItems = [
   { href: '/admin/members',   label: 'Members',   icon: '👥' },
   { href: '/admin/trainers',  label: 'Trainers',  icon: '🏋️' },
   { href: '/admin/requests',  label: 'Requests',  icon: '🔔' },
+  { href: '/admin/ai-plans',  label: 'AI Plans',  icon: '🤖' },
   { href: '/admin/community', label: 'Community', icon: '💬' },
   { href: '/admin/gameplan',  label: 'Gameplan',  icon: '📋' },
   { href: '/admin/events',    label: 'Events',    icon: '📅' },
@@ -31,6 +32,7 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
   const [inquiriesCount, setInquiriesCount] = useState(0)
   const [contactsCount, setContactsCount] = useState(0)
   const [reportsCount, setReportsCount] = useState(0)
+  const [aiPlansCount, setAiPlansCount] = useState(0)
 
   async function handleSignOut() {
     await signOut(auth)
@@ -75,12 +77,14 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         // Fetch badge counts in parallel (best-effort)
         const api = process.env.NEXT_PUBLIC_API_URL
         const headers = { Authorization: `Bearer ${token}` }
-        const [reqRes, bookRes, inqRes, conRes, repRes] = await Promise.allSettled([
+        const [reqRes, bookRes, inqRes, conRes, repRes, aiWorkoutRes, aiNutritionRes] = await Promise.allSettled([
           fetch(`${api}/day-change-requests/?status_filter=pending`, { headers }),
           fetch(`${api}/bookings/`, { headers }),
           fetch(`${api}/inquiries/`, { headers }),
           fetch(`${api}/contact-messages/`, { headers }),
           fetch(`${api}/community/reports`, { headers }),
+          fetch(`${api}/ai-plans/workout-requests?status_filter=pending`, { headers }),
+          fetch(`${api}/ai-plans/nutrition-requests?status_filter=pending`, { headers }),
         ])
         if (reqRes.status === 'fulfilled' && reqRes.value.ok) {
           const d = await reqRes.value.json()
@@ -101,6 +105,10 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
         if (repRes.status === 'fulfilled' && repRes.value.ok) {
           const d = await repRes.value.json()
           setReportsCount(d.length)
+        }
+        if (aiWorkoutRes.status === 'fulfilled' && aiWorkoutRes.value.ok && aiNutritionRes.status === 'fulfilled' && aiNutritionRes.value.ok) {
+          const [w, n] = await Promise.all([aiWorkoutRes.value.json(), aiNutritionRes.value.json()])
+          setAiPlansCount(w.length + n.length)
         }
       } catch {
         // Network or unexpected error — don't redirect, let them stay and retry
@@ -140,7 +148,8 @@ export default function BreakpointLayout({ children }: { children: React.ReactNo
               href === '/admin/bookings'  ? bookingsCount :
               href === '/admin/inquiries' ? inquiriesCount :
               href === '/admin/contacts'  ? contactsCount  :
-              href === '/admin/community' ? reportsCount   : 0
+              href === '/admin/community' ? reportsCount   :
+              href === '/admin/ai-plans'  ? aiPlansCount   : 0
             return (
               <Link
                 key={href}

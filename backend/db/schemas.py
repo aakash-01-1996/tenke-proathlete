@@ -497,3 +497,205 @@ class MetricOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Athlete Profile ──────────────────────────────────────────────────────────
+
+class AthleteProfileIn(BaseModel):
+    primary_goal: Optional[str] = None
+    secondary_goals: Optional[List[str]] = None
+    workout_style: Optional[str] = None
+    experience_level: Optional[str] = None
+    target_weight: Optional[str] = None
+    sessions_per_week_pref: Optional[int] = None
+    equipment_access: Optional[List[str]] = None
+    injury_notes: Optional[str] = None
+    dietary_preferences: Optional[List[str]] = None
+    allergies: Optional[str] = None
+    daily_calorie_target: Optional[int] = None
+    notes: Optional[str] = None
+
+    @field_validator('experience_level')
+    @classmethod
+    def experience_valid(cls, v):
+        if v is not None and v not in VALID_EXPERIENCE:
+            raise ValueError(f'Experience must be one of: {", ".join(VALID_EXPERIENCE)}')
+        return v
+
+
+class AthleteProfileOut(BaseModel):
+    id: UUID
+    member_id: UUID
+    primary_goal: Optional[str]
+    secondary_goals: Optional[List[str]]
+    workout_style: Optional[str]
+    experience_level: Optional[str]
+    target_weight: Optional[str]
+    sessions_per_week_pref: Optional[int]
+    equipment_access: Optional[List[str]]
+    injury_notes: Optional[str]
+    dietary_preferences: Optional[List[str]]
+    allergies: Optional[str]
+    daily_calorie_target: Optional[int]
+    notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator('secondary_goals', 'equipment_access', 'dietary_preferences', mode='before')
+    @classmethod
+    def parse_comma_list(cls, v):
+        if isinstance(v, str):
+            return [d.strip() for d in v.split(',') if d.strip()]
+        return v
+
+    class Config:
+        from_attributes = True
+
+
+# ── AI Workout Plan Requests ─────────────────────────────────────────────────
+
+class AIWorkoutPlanExerciseOut(BaseModel):
+    id: UUID
+    plan_day_id: UUID
+    name: str
+    sets: Optional[int]
+    reps: Optional[int]
+    duration: Optional[str]
+    is_rest: bool
+    rest_seconds: Optional[int]
+    ai_rationale: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class AIWorkoutPlanExerciseEditIn(BaseModel):
+    name: str
+    sets: Optional[int] = None
+    reps: Optional[int] = None
+    duration: Optional[str] = None
+    is_rest: bool = False
+    rest_seconds: Optional[int] = None
+
+
+class AIWorkoutPlanDayOut(BaseModel):
+    id: UUID
+    request_id: UUID
+    day_number: int
+    label: str
+    exercises: List[AIWorkoutPlanExerciseOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AIWorkoutPlanRequestOut(BaseModel):
+    id: UUID
+    member_id: UUID
+    requested_by: UUID
+    trigger_source: str
+    status: str
+    model_used: Optional[str]
+    error_message: Optional[str]
+    coach_notes: Optional[str]
+    reviewed_by: Optional[UUID]
+    created_at: datetime
+    reviewed_at: Optional[datetime]
+    days: List[AIWorkoutPlanDayOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AIPlanDenyIn(BaseModel):
+    coach_notes: Optional[str] = None
+
+
+# ── AI Nutrition Plan Requests ───────────────────────────────────────────────
+
+class AINutritionPlanMealOut(BaseModel):
+    id: UUID
+    request_id: UUID
+    meal_order: int
+    label: str
+    food_items: Optional[str]
+    calories: Optional[int]
+    protein_g: Optional[int]
+    carbs_g: Optional[int]
+    fat_g: Optional[int]
+    notes: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class AINutritionPlanMealEditIn(BaseModel):
+    label: str
+    food_items: Optional[str] = None
+    calories: Optional[int] = None
+    protein_g: Optional[int] = None
+    carbs_g: Optional[int] = None
+    fat_g: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class AINutritionPlanRequestOut(BaseModel):
+    id: UUID
+    member_id: UUID
+    requested_by: UUID
+    trigger_source: str
+    status: str
+    model_used: Optional[str]
+    error_message: Optional[str]
+    coach_notes: Optional[str]
+    daily_calories: Optional[int]
+    daily_protein_g: Optional[int]
+    daily_carbs_g: Optional[int]
+    daily_fat_g: Optional[int]
+    summary_notes: Optional[str]
+    reviewed_by: Optional[UUID]
+    created_at: datetime
+    reviewed_at: Optional[datetime]
+    meals: List[AINutritionPlanMealOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class AIGenerateRequestIn(BaseModel):
+    pass
+
+
+# ── Nutrition Plan (approved, live) ──────────────────────────────────────────
+
+class NutritionMealOut(BaseModel):
+    id: UUID
+    plan_id: UUID
+    meal_order: int
+    label: str
+    food_items: Optional[str]
+    calories: Optional[int]
+    protein_g: Optional[int]
+    carbs_g: Optional[int]
+    fat_g: Optional[int]
+    notes: Optional[str]
+
+    class Config:
+        from_attributes = True
+
+
+class NutritionPlanOut(BaseModel):
+    id: UUID
+    member_id: UUID
+    daily_calories: Optional[int]
+    daily_protein_g: Optional[int]
+    daily_carbs_g: Optional[int]
+    daily_fat_g: Optional[int]
+    summary_notes: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    meals: List[NutritionMealOut] = []
+
+    class Config:
+        from_attributes = True

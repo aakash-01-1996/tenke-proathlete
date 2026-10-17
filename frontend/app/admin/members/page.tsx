@@ -118,6 +118,9 @@ export default function MembersPage() {
   const [previewMember, setPreviewMember] = useState<Member | null>(null)
   const [previewMode, setPreviewMode] = useState<'mobile' | 'tablet' | 'desktop'>('mobile')
   const [showInactiveOnly, setShowInactiveOnly] = useState(false)
+  const [generatingWorkout, setGeneratingWorkout] = useState(false)
+  const [generatingNutrition, setGeneratingNutrition] = useState(false)
+  const [aiPlanMessage, setAiPlanMessage] = useState('')
 
   const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -174,6 +177,34 @@ export default function MembersPage() {
     })
     setModalError('')
     setShowModal(true)
+  }
+
+  async function generateAIPlan(kind: 'workout' | 'nutrition') {
+    if (!editTarget) return
+    const setGenerating = kind === 'workout' ? setGeneratingWorkout : setGeneratingNutrition
+    setGenerating(true)
+    setAiPlanMessage('')
+    try {
+      const token = await getToken()
+      const res = await fetch(`${API}/ai-plans/${editTarget.id}/generate-${kind}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setAiPlanMessage(data?.detail || `Failed to generate ${kind} plan.`)
+        return
+      }
+      setAiPlanMessage(
+        data.status === 'failed'
+          ? `Generation failed: ${data.error_message ?? 'unknown error'}`
+          : `AI ${kind} plan generated — review it under Admin → AI Plans.`
+      )
+    } catch {
+      setAiPlanMessage('Unable to reach the server. Please try again.')
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const toggleDay = (day: string) => {
@@ -630,6 +661,38 @@ export default function MembersPage() {
                 </div>
               )}
             </div>
+
+            {editTarget && (
+              <div className="mt-6 pt-5 border-t border-gray-100">
+                <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">AI-Suggested Plans</p>
+                <p className="text-xs text-gray-400 mb-3">
+                  Generates a recommended plan for review under Admin → AI Plans — nothing is final until you approve it there.
+                </p>
+                {aiPlanMessage && (
+                  <p className="text-xs text-gray-600 mb-3">{aiPlanMessage}</p>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => generateAIPlan('workout')}
+                    disabled={generatingWorkout}
+                    className="text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.5rem 0.875rem' }}
+                  >
+                    {generatingWorkout ? 'Generating...' : 'Generate AI Workout Plan'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => generateAIPlan('nutrition')}
+                    disabled={generatingNutrition}
+                    className="text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition disabled:opacity-50"
+                    style={{ padding: '0.5rem 0.875rem' }}
+                  >
+                    {generatingNutrition ? 'Generating...' : 'Generate AI Nutrition Plan'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="flex justify-end gap-3" style={{ marginTop: '1.75rem' }}>
               <button onClick={() => setShowModal(false)} disabled={saving}

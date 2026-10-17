@@ -10,3 +10,4 @@ firebase-admin
 slowapi
 email-validator
 cloudinary
+anthropic
