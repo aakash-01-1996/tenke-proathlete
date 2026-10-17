@@ -1,4 +1,56 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { getAuth, onAuthStateChanged } from 'firebase/auth'
+import { app } from '@/lib/firebase'
+
+type NutritionMeal = {
+  id: string
+  meal_order: number
+  label: string
+  food_items: string | null
+  calories: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  notes: string | null
+}
+
+type NutritionPlan = {
+  id: string
+  daily_calories: number | null
+  daily_protein_g: number | null
+  daily_carbs_g: number | null
+  daily_fat_g: number | null
+  summary_notes: string | null
+  meals: NutritionMeal[]
+}
+
 export default function NutritionPage() {
+  const [plan, setPlan] = useState<NutritionPlan | null>(null)
+  const [loading, setLoading] = useState(true)
+  const API = process.env.NEXT_PUBLIC_API_URL
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(getAuth(app), async (user) => {
+      if (!user) { setLoading(false); return }
+      try {
+        const token = await user.getIdToken()
+        const headers = { Authorization: `Bearer ${token}` }
+        const meRes = await fetch(`${API}/auth/me`, { headers })
+        if (!meRes.ok) { setLoading(false); return }
+        const me = await meRes.json()
+        const memberId = me.role === 'member' ? me.ref_id : null
+        if (!memberId) { setLoading(false); return }
+        const planRes = await fetch(`${API}/nutrition/${memberId}/plan`, { headers })
+        if (planRes.ok) setPlan(await planRes.json())
+      } finally {
+        setLoading(false)
+      }
+    })
+    return unsub
+  }, [])
+
   const resources = [
     {
       id: '1',
@@ -50,6 +102,34 @@ export default function NutritionPage() {
             Use the resources below to build healthy habits, optimize your diet, and stay on track with your goals.
           </p>
         </div>
+
+        {/* Active plan */}
+        {!loading && plan && (
+          <div style={{ marginBottom: '2.5rem' }}>
+            <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-4">Your Active Plan</p>
+            <div className="bg-white rounded-2xl border border-gray-200" style={{ padding: '1.5rem' }}>
+              {(plan.daily_calories || plan.daily_protein_g || plan.daily_carbs_g || plan.daily_fat_g) && (
+                <div className="flex gap-6 mb-4">
+                  {plan.daily_calories != null && <div><p className="text-xs text-gray-400 mb-0.5">Calories</p><p className="text-sm font-semibold text-gray-800">{plan.daily_calories} kcal</p></div>}
+                  {plan.daily_protein_g != null && <div><p className="text-xs text-gray-400 mb-0.5">Protein</p><p className="text-sm font-semibold text-gray-800">{plan.daily_protein_g}g</p></div>}
+                  {plan.daily_carbs_g != null && <div><p className="text-xs text-gray-400 mb-0.5">Carbs</p><p className="text-sm font-semibold text-gray-800">{plan.daily_carbs_g}g</p></div>}
+                  {plan.daily_fat_g != null && <div><p className="text-xs text-gray-400 mb-0.5">Fat</p><p className="text-sm font-semibold text-gray-800">{plan.daily_fat_g}g</p></div>}
+                </div>
+              )}
+              {plan.summary_notes && (
+                <p className="text-sm text-gray-600 mb-4">{plan.summary_notes}</p>
+              )}
+              <div className="flex flex-col gap-2">
+                {plan.meals.map((meal) => (
+                  <div key={meal.id} className="bg-gray-50 rounded-xl" style={{ padding: '0.75rem 1rem' }}>
+                    <p className="text-sm font-semibold text-gray-800 mb-1">{meal.label}</p>
+                    {meal.food_items && <p className="text-xs text-gray-500">{meal.food_items}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Divider */}
         <hr className="border-gray-300" style={{ marginBottom: '2.5rem' }} />

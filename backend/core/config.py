@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     SMTP_REPLY_TO: str = ""
     SMTP_HOST_USER: str = ""   # head coach
     ALLOWED_ORIGINS: str = "http://localhost:3000"  # comma-separated in prod
+    ANTHROPIC_API_KEY: str = ""
 
     class Config:
         env_file = ".env"

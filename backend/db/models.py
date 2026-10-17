@@ -225,3 +225,130 @@ class ExerciseWeightLog(Base):
     weight = Column(String, nullable=False)      # e.g. "45 lbs", "20 kg"
     logged_at = Column(Date, nullable=False, server_default=func.current_date())
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class AthleteProfile(Base):
+    __tablename__ = "athlete_profiles"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), unique=True, nullable=False)
+    primary_goal = Column(String, nullable=True)           # e.g. "speed", "strength", "vertical", "weight_loss"
+    secondary_goals = Column(String, nullable=True)        # comma-separated
+    workout_style = Column(String, nullable=True)          # e.g. "strength", "agility", "hybrid", "conditioning"
+    experience_level = Column(String, nullable=True)       # "beginner", "intermediate", "advanced", "pro"
+    target_weight = Column(String, nullable=True)          # e.g. "165 lbs"
+    sessions_per_week_pref = Column(Integer, nullable=True)
+    equipment_access = Column(String, nullable=True)        # comma-separated e.g. "gym,home,bands"
+    injury_notes = Column(Text, nullable=True)
+    dietary_preferences = Column(String, nullable=True)    # comma-separated e.g. "vegetarian,gluten_free"
+    allergies = Column(Text, nullable=True)
+    daily_calorie_target = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class AIPlanRequestStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    denied = "denied"
+    failed = "failed"
+
+
+class AIWorkoutPlanRequest(Base):
+    __tablename__ = "ai_workout_plan_requests"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
+    requested_by = Column(UUID(as_uuid=True), nullable=False)
+    trigger_source = Column(String, nullable=False)   # "member" | "coach"
+    status = Column(Enum(AIPlanRequestStatus), nullable=False, default=AIPlanRequestStatus.pending)
+    model_used = Column(String, nullable=True)
+    raw_response_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    coach_notes = Column(Text, nullable=True)
+    reviewed_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AIWorkoutPlanDay(Base):
+    __tablename__ = "ai_workout_plan_days"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(UUID(as_uuid=True), ForeignKey("ai_workout_plan_requests.id", ondelete="CASCADE"), nullable=False)
+    day_number = Column(Integer, nullable=False)
+    label = Column(String, nullable=False, default="Workout")
+
+
+class AIWorkoutPlanExercise(Base):
+    __tablename__ = "ai_workout_plan_exercises"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_day_id = Column(UUID(as_uuid=True), ForeignKey("ai_workout_plan_days.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    sets = Column(Integer, nullable=True)
+    reps = Column(Integer, nullable=True)
+    duration = Column(String, nullable=True)
+    is_rest = Column(Boolean, nullable=False, default=False, server_default='false')
+    rest_seconds = Column(Integer, nullable=True)
+    ai_rationale = Column(Text, nullable=True)   # coach-facing context only, not copied on approval
+
+
+class NutritionPlan(Base):
+    __tablename__ = "nutrition_plans"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
+    daily_calories = Column(Integer, nullable=True)
+    daily_protein_g = Column(Integer, nullable=True)
+    daily_carbs_g = Column(Integer, nullable=True)
+    daily_fat_g = Column(Integer, nullable=True)
+    summary_notes = Column(Text, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, server_default='true')
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class NutritionMeal(Base):
+    __tablename__ = "nutrition_meals"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    plan_id = Column(UUID(as_uuid=True), ForeignKey("nutrition_plans.id", ondelete="CASCADE"), nullable=False)
+    meal_order = Column(Integer, nullable=False)
+    label = Column(String, nullable=False, default="Meal")
+    food_items = Column(Text, nullable=True)
+    calories = Column(Integer, nullable=True)
+    protein_g = Column(Integer, nullable=True)
+    carbs_g = Column(Integer, nullable=True)
+    fat_g = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+
+
+class AINutritionPlanRequest(Base):
+    __tablename__ = "ai_nutrition_plan_requests"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    member_id = Column(UUID(as_uuid=True), ForeignKey("members.id", ondelete="CASCADE"), nullable=False)
+    requested_by = Column(UUID(as_uuid=True), nullable=False)
+    trigger_source = Column(String, nullable=False)   # "member" | "coach"
+    status = Column(Enum(AIPlanRequestStatus), nullable=False, default=AIPlanRequestStatus.pending)
+    model_used = Column(String, nullable=True)
+    raw_response_json = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    coach_notes = Column(Text, nullable=True)
+    daily_calories = Column(Integer, nullable=True)
+    daily_protein_g = Column(Integer, nullable=True)
+    daily_carbs_g = Column(Integer, nullable=True)
+    daily_fat_g = Column(Integer, nullable=True)
+    summary_notes = Column(Text, nullable=True)
+    reviewed_by = Column(UUID(as_uuid=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class AINutritionPlanMeal(Base):
+    __tablename__ = "ai_nutrition_plan_meals"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    request_id = Column(UUID(as_uuid=True), ForeignKey("ai_nutrition_plan_requests.id", ondelete="CASCADE"), nullable=False)
+    meal_order = Column(Integer, nullable=False)
+    label = Column(String, nullable=False, default="Meal")
+    food_items = Column(Text, nullable=True)
+    calories = Column(Integer, nullable=True)
+    protein_g = Column(Integer, nullable=True)
+    carbs_g = Column(Integer, nullable=True)
+    fat_g = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
